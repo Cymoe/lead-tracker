@@ -1,4 +1,4 @@
-import { KeywordCategory, KEYWORD_TEMPLATES } from './constants';
+import { KeywordCategory, KEYWORD_TEMPLATES, generateCustomKeywords } from './constants';
 
 // Major cities and their key suburbs for location-specific searches
 const CITY_SUBURBS: Record<string, string[]> = {

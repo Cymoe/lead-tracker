@@ -4,36 +4,39 @@ export default function SourceFilter() {
   const { sourceFilter, toggleSourceFilter } = useLeadStore();
 
   return (
-    <div className="flex gap-4 mb-4">
-      <label className="flex items-center">
-        <input
-          type="checkbox"
-          checked={sourceFilter.instagram}
-          onChange={() => toggleSourceFilter('instagram')}
-          className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-        />
-        <span className="text-sm text-gray-700">Instagram Manual</span>
-      </label>
+    <div className="flex gap-3 mb-6">
+      <button
+        onClick={() => toggleSourceFilter('instagram')}
+        className={`px-4 py-2 rounded-lg border transition-all ${
+          sourceFilter.instagram
+            ? 'bg-green-900/20 border-green-700/50 text-white'
+            : 'bg-gray-800/50 border-gray-700 text-gray-400 hover:text-gray-300 hover:border-gray-600'
+        }`}
+      >
+        <span className="text-sm font-medium">Instagram Manual</span>
+      </button>
       
-      <label className="flex items-center">
-        <input
-          type="checkbox"
-          checked={sourceFilter.adLibrary}
-          onChange={() => toggleSourceFilter('adLibrary')}
-          className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-        />
-        <span className="text-sm text-gray-700">FB Ad Library</span>
-      </label>
+      <button
+        onClick={() => toggleSourceFilter('adLibrary')}
+        className={`px-4 py-2 rounded-lg border transition-all ${
+          sourceFilter.adLibrary
+            ? 'bg-green-900/20 border-green-700/50 text-white'
+            : 'bg-gray-800/50 border-gray-700 text-gray-400 hover:text-gray-300 hover:border-gray-600'
+        }`}
+      >
+        <span className="text-sm font-medium">FB Ad Library</span>
+      </button>
       
-      <label className="flex items-center">
-        <input
-          type="checkbox"
-          checked={sourceFilter.googleMaps}
-          onChange={() => toggleSourceFilter('googleMaps')}
-          className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-        />
-        <span className="text-sm text-gray-700">Google Maps</span>
-      </label>
+      <button
+        onClick={() => toggleSourceFilter('googleMaps')}
+        className={`px-4 py-2 rounded-lg border transition-all ${
+          sourceFilter.googleMaps
+            ? 'bg-green-900/20 border-green-700/50 text-white'
+            : 'bg-gray-800/50 border-gray-700 text-gray-400 hover:text-gray-300 hover:border-gray-600'
+        }`}
+      >
+        <span className="text-sm font-medium">Google Maps</span>
+      </button>
     </div>
   );
 }

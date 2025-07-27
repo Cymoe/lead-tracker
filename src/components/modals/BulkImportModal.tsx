@@ -6,7 +6,8 @@ import { saveLead } from '@/lib/api';
 import { Lead } from '@/types';
 import toast from 'react-hot-toast';
 import KeywordAssistant from '../KeywordAssistant';
-import SimpleCitySearch from '../SimpleCitySearch';
+import USCityAutocomplete from '../USCityAutocomplete';
+import ServiceTypeDropdown from '../ServiceTypeDropdown';
 import { extractWithAI, extractWithAIStream } from '@/lib/api';
 
 interface BulkImportModalProps {
@@ -18,12 +19,13 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
   const { openaiApiKey, addLead, leads, keywordSession } = useLeadStore();
   const [bulkData, setBulkData] = useState('');
   const [bulkCity, setBulkCity] = useState('');
-  const [bulkSource, setBulkSource] = useState<'FB Ad Library' | 'Instagram Manual' | 'Google Maps'>('FB Ad Library');
+  const [bulkSource, setBulkSource] = useState<'FB Ad Library' | 'Instagram Manual' | 'Google Maps'>('Instagram Manual');
   const [isProcessing, setIsProcessing] = useState(false);
   const [preview, setPreview] = useState<Lead[]>([]);
   const [showPreview, setShowPreview] = useState(false);
-  const [streamingMode, setStreamingMode] = useState(true);
+  const streamingMode = true; // Always use streaming for better UX
   const [processedCount, setProcessedCount] = useState(0);
+  const [selectedServiceType, setSelectedServiceType] = useState('');
 
   const handleAIExtract = async () => {
     if (!bulkData.trim()) {
@@ -46,7 +48,7 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
         await extractWithAIStream(
           bulkData,
           bulkCity,
-          serviceType,
+          selectedServiceType,
           openaiApiKey,
           (lead: Lead) => {
             // Filter duplicate as it arrives
@@ -88,7 +90,7 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
         const extractedLeads = await extractWithAI(
           bulkData,
           bulkCity,
-          serviceType,
+          selectedServiceType,
           openaiApiKey
         );
 
@@ -203,8 +205,8 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
   };
 
   const getCurrentServiceType = () => {
-    // Get from keyword session context
-    return null; // This would be implemented based on the current keyword session
+    // Use the selected service type from the form
+    return selectedServiceType || null;
   };
 
   const detectServiceType = (name: string): string => {
@@ -271,60 +273,52 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
                       </Dialog.Title>
 
                       <div className="mt-4">
-                        <div className="mb-4 p-4 bg-blue-50 rounded-lg">
-                          <p className="text-sm text-blue-800 font-medium mb-2">Instructions:</p>
-                          <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
-                            <li>Search FB Ad Library for your target (e.g. "turf Phoenix")</li>
-                            <li>Copy company names from results</li>
-                            <li>Paste below in any format</li>
-                            <li>System will parse and import automatically</li>
-                          </ol>
+
+                        <div className="mb-4">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Import Source
+                          </label>
+                          <select
+                            value={bulkSource}
+                            onChange={(e) => setBulkSource(e.target.value as 'FB Ad Library' | 'Instagram Manual' | 'Google Maps')}
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="Instagram Manual">Instagram Manual</option>
+                            <option value="FB Ad Library">FB Ad Library</option>
+                            <option value="Google Maps">Google Maps</option>
+                          </select>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                              Import Source
-                            </label>
-                            <select
-                              value={bulkSource}
-                              onChange={(e) => setBulkSource(e.target.value as 'FB Ad Library' | 'Instagram Manual' | 'Google Maps')}
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                            >
-                              <option value="FB Ad Library">FB Ad Library</option>
-                              <option value="Instagram Manual">Instagram Manual</option>
-                              <option value="Google Maps">Google Maps</option>
-                            </select>
-                          </div>
-
+                        <div className="space-y-4 mb-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700">
                               Default City (optional)
                             </label>
-                            <SimpleCitySearch
+                            <USCityAutocomplete
                               value={bulkCity}
                               onChange={setBulkCity}
-                              placeholder="Type or select a city..."
+                              placeholder="Type city name or state code..."
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                              required={false}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              Service Type (optional)
+                            </label>
+                            <ServiceTypeDropdown
+                              value={selectedServiceType}
+                              onChange={setSelectedServiceType}
+                              placeholder="Type or select a service..."
                               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             />
                           </div>
                         </div>
 
-                        <div className="mb-4 flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id="streamingMode"
-                            checked={streamingMode}
-                            onChange={(e) => setStreamingMode(e.target.checked)}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <label htmlFor="streamingMode" className="text-sm text-gray-700">
-                            Enable real-time streaming (show leads as they're processed)
-                          </label>
-                        </div>
 
                         {bulkSource === 'FB Ad Library' && (
-                          <KeywordAssistant city={bulkCity} />
+                          <KeywordAssistant city={bulkCity} serviceType={selectedServiceType} />
                         )}
 
                         <div>

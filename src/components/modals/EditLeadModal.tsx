@@ -5,7 +5,10 @@ import { useLeadStore } from '@/lib/store';
 import { updateLead } from '@/lib/api';
 import { Lead } from '@/types';
 import toast from 'react-hot-toast';
-import SimpleCitySearch from '../SimpleCitySearch';
+import USCityAutocomplete from '../USCityAutocomplete';
+import ServiceTypeDropdown from '../ServiceTypeDropdown';
+import AdPlatformChecker from '../AdPlatformChecker';
+import AdViewerModal from './AdViewerModal';
 
 interface EditLeadModalProps {
   open: boolean;
@@ -13,22 +16,18 @@ interface EditLeadModalProps {
   lead: Lead | null;
 }
 
-const SERVICE_TYPES = [
-  'Turf', 'Painting', 'Remodeling', 'Landscaping', 'Roofing',
-  'Plumbing', 'Electrical', 'HVAC', 'Concrete', 'Fencing',
-  'Pool Service', 'Pest Control', 'Cleaning Service', 'Tree Service'
-];
+// Removed - now using ServiceTypeDropdown with Grey Tsunami business types
 
 export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProps) {
   const { updateLead: updateLeadInStore } = useLeadStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showCustomService, setShowCustomService] = useState(false);
+  const [showAdViewer, setShowAdViewer] = useState(false);
+  // Removed showCustomService - ServiceTypeDropdown handles custom types
   
   const [formData, setFormData] = useState({
     handle: '',
     companyName: '',
-    serviceType: 'Turf',
-    customServiceType: '',
+    serviceType: '',
     city: '',
     phone: '',
     website: '',
@@ -42,14 +41,12 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
   // Update form when lead changes
   useEffect(() => {
     if (lead) {
-      const isCustomService = !SERVICE_TYPES.includes(lead.service_type || '');
-      setShowCustomService(isCustomService);
+      // ServiceTypeDropdown handles all business types
       
       setFormData({
         handle: lead.handle || '',
         companyName: lead.company_name || '',
-        serviceType: isCustomService ? 'Other' : (lead.service_type || 'Turf'),
-        customServiceType: isCustomService ? (lead.service_type || '') : '',
+        serviceType: lead.service_type || '',
         city: lead.city || '',
         phone: lead.phone || '',
         website: lead.website || '',
@@ -69,14 +66,12 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
     setIsSubmitting(true);
 
     try {
-      const serviceType = formData.serviceType === 'Other' 
-        ? formData.customServiceType 
-        : formData.serviceType;
+      // ServiceTypeDropdown handles all business types including custom ones
 
       const updates: Partial<Lead> = {
         handle: formData.handle || null,
         company_name: formData.companyName,
-        service_type: serviceType || null,
+        service_type: formData.serviceType || null,
         city: formData.city || null,
         phone: formData.phone || null,
         website: formData.website || null,
@@ -105,8 +100,9 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
   if (!lead) return null;
 
   return (
-    <Transition.Root show={open} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
+    <>
+      <Transition.Root show={open} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={onClose}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-300"
@@ -179,46 +175,26 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
                             
                             <div>
                               <label className="block text-sm font-medium text-gray-700">
-                                Service Type
+                                Business Type
                               </label>
-                              <select
+                              <ServiceTypeDropdown
                                 value={formData.serviceType}
-                                onChange={(e) => {
-                                  setFormData({ ...formData, serviceType: e.target.value });
-                                  setShowCustomService(e.target.value === 'Other');
-                                }}
+                                onChange={(value) => setFormData({ ...formData, serviceType: value })}
+                                placeholder="Search SMB acquisition targets..."
                                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                              >
-                                {SERVICE_TYPES.map(type => (
-                                  <option key={type} value={type}>{type}</option>
-                                ))}
-                                <option value="Other">Other</option>
-                              </select>
+                              />
                             </div>
-                            
-                            {showCustomService && (
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700">
-                                  Custom Service Type
-                                </label>
-                                <input
-                                  type="text"
-                                  value={formData.customServiceType}
-                                  onChange={(e) => setFormData({ ...formData, customServiceType: e.target.value })}
-                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                />
-                              </div>
-                            )}
                             
                             <div>
                               <label className="block text-sm font-medium text-gray-700">
                                 City
                               </label>
-                              <SimpleCitySearch
+                              <USCityAutocomplete
                                 value={formData.city}
                                 onChange={(value) => setFormData({ ...formData, city: value })}
-                                placeholder="Type or select a city..."
+                                placeholder="Type city name or state code..."
                                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                required={false}
                               />
                             </div>
                             
@@ -275,6 +251,19 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
                             <label htmlFor="runningAds" className="ml-2 block text-sm text-gray-900">
                               Currently running ads
                             </label>
+                          </div>
+                          
+                          {/* Ad Platform Status */}
+                          <div className="border-t pt-4">
+                            <AdPlatformChecker
+                              platforms={lead.ad_platforms || []}
+                              onPlatformCheck={async (platform) => {
+                                // TODO: Implement individual platform check
+                                toast(`Checking ${platform} for ${lead.company_name}...`);
+                              }}
+                              onViewAds={() => setShowAdViewer(true)}
+                              compact={false}
+                            />
                           </div>
                           
                           {formData.runningAds && (
@@ -345,5 +334,12 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
         </div>
       </Dialog>
     </Transition.Root>
+    
+      <AdViewerModal
+        open={showAdViewer}
+        onClose={() => setShowAdViewer(false)}
+        lead={lead}
+      />
+    </>
   );
 }

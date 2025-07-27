@@ -4,8 +4,10 @@ import {
   CloudArrowUpIcon, 
   DocumentArrowUpIcon, 
   DocumentArrowDownIcon,
-  EllipsisVerticalIcon 
+  EllipsisVerticalIcon,
+  MapIcon
 } from '@heroicons/react/24/outline';
+import Link from 'next/link';
 import { Menu, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
 
@@ -38,7 +40,7 @@ export default function SimpleHeader({
       <div className="flex items-center gap-2">
         {/* Import Button */}
         <Menu as="div" className="relative inline-block text-left">
-          <Menu.Button className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+          <Menu.Button className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white focus:ring-blue-500 transition-colors shadow-sm">
             <CloudArrowUpIcon className="h-4 w-4 mr-2" />
             Import
           </Menu.Button>
@@ -59,7 +61,7 @@ export default function SimpleHeader({
                       onClick={onBulkImport}
                       className={`${
                         active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
-                      } group flex items-center px-4 py-2 text-sm w-full text-left`}
+                      } group flex items-center px-4 py-2 text-sm w-full text-left transition-colors`}
                     >
                       <CloudArrowUpIcon className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500 flex-shrink-0" />
                       <span className="truncate">From URL</span>
@@ -72,7 +74,7 @@ export default function SimpleHeader({
                       onClick={onCSVImport}
                       className={`${
                         active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
-                      } group flex items-center px-4 py-2 text-sm w-full text-left`}
+                      } group flex items-center px-4 py-2 text-sm w-full text-left transition-colors`}
                     >
                       <DocumentArrowUpIcon className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500 flex-shrink-0" />
                       <span className="truncate">CSV File</span>
@@ -86,7 +88,7 @@ export default function SimpleHeader({
 
         {/* Export Button */}
         <Menu as="div" className="relative inline-block text-left">
-          <Menu.Button className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+          <Menu.Button className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white focus:ring-blue-500 transition-colors shadow-sm">
             <DocumentArrowDownIcon className="h-4 w-4 mr-2" />
             Export
           </Menu.Button>
@@ -107,7 +109,7 @@ export default function SimpleHeader({
                       onClick={onGoogleSheetsExport}
                       className={`${
                         active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
-                      } group flex items-center px-4 py-2 text-sm w-full text-left`}
+                      } group flex items-center px-4 py-2 text-sm w-full text-left transition-colors`}
                     >
                       <DocumentArrowDownIcon className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500 flex-shrink-0" />
                       <span className="truncate">Google Sheets</span>
@@ -120,7 +122,7 @@ export default function SimpleHeader({
                       onClick={onCSVExport}
                       className={`${
                         active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
-                      } group flex items-center px-4 py-2 text-sm w-full text-left`}
+                      } group flex items-center px-4 py-2 text-sm w-full text-left transition-colors`}
                     >
                       <DocumentArrowDownIcon className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500 flex-shrink-0" />
                       <span className="truncate">CSV File</span>
@@ -133,7 +135,7 @@ export default function SimpleHeader({
                       onClick={onCloseCRMExport}
                       className={`${
                         active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
-                      } group flex items-center px-4 py-2 text-sm w-full text-left`}
+                      } group flex items-center px-4 py-2 text-sm w-full text-left transition-colors`}
                     >
                       <DocumentArrowDownIcon className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500 flex-shrink-0" />
                       <span className="truncate">Close CRM</span>

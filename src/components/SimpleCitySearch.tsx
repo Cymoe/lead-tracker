@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import USCityAutocomplete from './USCityAutocomplete';
 
 interface SimpleCitySearchProps {
   value: string;
@@ -6,6 +7,7 @@ interface SimpleCitySearchProps {
   placeholder?: string;
   className?: string;
   required?: boolean;
+  useComprehensiveData?: boolean; // New prop to opt-in to full city data
 }
 
 // Top 20 most populated US cities for initial display - diverse geographic representation
@@ -213,17 +215,40 @@ const STATE_ABBR: Record<string, string> = {
   'WV': 'West Virginia', 'WI': 'Wisconsin', 'WY': 'Wyoming'
 };
 
+// Create array of state objects for display
+const US_STATES = Object.entries(STATE_ABBR).map(([code, name]) => ({
+  code,
+  name,
+  displayName: `${code} - ${name}`
+})).sort((a, b) => a.name.localeCompare(b.name));
+
 export default function SimpleCitySearch({
   value,
   onChange,
   placeholder = "Type or select a city...",
   className = "",
-  required = false
+  required = false,
+  useComprehensiveData = false
 }: SimpleCitySearchProps) {
+  console.log('SimpleCitySearch - US_STATES count:', US_STATES.length);
+  // Temporarily comment out to ensure we use our new implementation
+  // if (useComprehensiveData) {
+  //   return (
+  //     <USCityAutocomplete
+  //       value={value}
+  //       onChange={onChange}
+  //       placeholder={placeholder}
+  //       className={className}
+  //       required={required}
+  //     />
+  //   );
+  // }
   const [filteredCities, setFilteredCities] = useState<string[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [inputValue, setInputValue] = useState(value);
   const [recentCities, setRecentCities] = useState<string[]>([]);
+  const [displayMode, setDisplayMode] = useState<'states' | 'cities' | 'search'>('states');
+  const [selectedState, setSelectedState] = useState<string | null>(null);
 
   // Load recent cities from localStorage on mount
   useEffect(() => {
@@ -296,14 +321,12 @@ export default function SimpleCitySearch({
     if (newValue.length >= 1) {
       const filtered = searchCities(newValue);
       setFilteredCities(filtered.slice(0, 20)); // Show max 20 results
+      setDisplayMode('search');
       setShowDropdown(true);
     } else if (newValue.length === 0) {
-      // Show popular + recent cities when empty
-      const citiesToShow = [
-        ...recentCities.filter(c => UNIQUE_CITIES.includes(c)),
-        ...POPULAR_CITIES.filter(c => !recentCities.includes(c))
-      ].slice(0, 20);
-      setFilteredCities(citiesToShow);
+      // Show states when empty
+      setDisplayMode('states');
+      setSelectedState(null);
       setShowDropdown(true);
     } else {
       setShowDropdown(false);
@@ -319,76 +342,150 @@ export default function SimpleCitySearch({
 
   return (
     <div className="relative">
-      <input
-        type="text"
-        value={inputValue}
-        onChange={handleInputChange}
-        onFocus={() => {
-          if (inputValue.length >= 1) {
-            const filtered = searchCities(inputValue);
-            setFilteredCities(filtered.slice(0, 20));
-            setShowDropdown(true);
-          } else {
-            // Show popular + recent cities when focused with empty input
-            const citiesToShow = [
-              ...recentCities.filter(c => UNIQUE_CITIES.includes(c)),
-              ...POPULAR_CITIES.filter(c => !recentCities.includes(c))
-            ].slice(0, 20);
-            setFilteredCities(citiesToShow);
-            setShowDropdown(true);
-          }
-        }}
-        onBlur={() => {
-          // Delay to allow click on dropdown
-          setTimeout(() => setShowDropdown(false), 200);
-        }}
-        placeholder={placeholder}
-        className={className}
-        required={required}
-        autoComplete="off"
-      />
+      <div className="relative">
+        <input
+          type="text"
+          value={inputValue}
+          onChange={handleInputChange}
+          onFocus={() => {
+            console.log('SimpleCitySearch onFocus - inputValue:', inputValue, 'length:', inputValue.length);
+            if (inputValue.length === 0) {
+              // Show states when focused with empty input
+              console.log('Setting display mode to states');
+              setDisplayMode('states');
+              setSelectedState(null);
+              setShowDropdown(true);
+            } else {
+              // Show search results for non-empty input
+              const filtered = searchCities(inputValue);
+              setFilteredCities(filtered.slice(0, 20));
+              setDisplayMode('search');
+              setShowDropdown(true);
+            }
+          }}
+          onBlur={() => {
+            // Delay to allow click on dropdown
+            setTimeout(() => setShowDropdown(false), 200);
+          }}
+          placeholder={placeholder}
+          className={`${className} pr-10`}
+          required={required}
+          autoComplete="off"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            console.log('Dropdown button clicked!');
+            setDisplayMode('states');
+            setSelectedState(null);
+            setShowDropdown(!showDropdown);
+          }}
+          className="absolute inset-y-0 right-0 px-3 flex items-center"
+        >
+          <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </button>
+      </div>
       
-      {showDropdown && filteredCities.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-          {/* Show section headers when input is empty */}
-          {inputValue.length === 0 && recentCities.length > 0 && (
+      {showDropdown && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-96 overflow-auto">
+          {console.log('Dropdown rendering - showDropdown:', showDropdown, 'displayMode:', displayMode)}
+          {/* State Selection Mode */}
+          {displayMode === 'states' && (
             <>
-              <div className="px-3 py-1 text-xs font-semibold text-gray-500 bg-gray-50">
-                Recent Cities
+              <div className="px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-b sticky top-0">
+                🏙️ Select a State ({US_STATES.length} states available)
               </div>
-              {recentCities.filter(c => UNIQUE_CITIES.includes(c)).map((city, index) => (
+              {US_STATES.map((state) => (
                 <div
-                  key={`recent-${index}`}
+                  key={state.code}
+                  className="px-3 py-2 cursor-pointer hover:bg-blue-50 flex items-center justify-between group"
+                  onClick={() => {
+                    setSelectedState(state.code);
+                    setDisplayMode('cities');
+                    const stateCities = UNIQUE_CITIES.filter(city => 
+                      city.endsWith(`, ${state.code}`)
+                    );
+                    setFilteredCities(stateCities);
+                  }}
+                >
+                  <span className="font-medium">{state.displayName}</span>
+                  <span className="text-gray-400 text-sm group-hover:text-gray-600">
+                    {UNIQUE_CITIES.filter(city => city.endsWith(`, ${state.code}`)).length} cities
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* City Selection Mode (after state selection) */}
+          {displayMode === 'cities' && selectedState && (
+            <>
+              <div className="px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-b sticky top-0 flex items-center justify-between">
+                <button
+                  className="text-blue-600 hover:text-blue-800 flex items-center"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDisplayMode('states');
+                    setSelectedState(null);
+                  }}
+                >
+                  ← Back to States
+                </button>
+                <span>{STATE_ABBR[selectedState]} Cities</span>
+              </div>
+              {filteredCities.map((city, index) => (
+                <div
+                  key={index}
                   className="px-3 py-2 cursor-pointer hover:bg-gray-100"
                   onClick={() => handleSelectCity(city)}
                 >
                   {city}
                 </div>
               ))}
-              <div className="px-3 py-1 text-xs font-semibold text-gray-500 bg-gray-50">
-                Popular Cities
-              </div>
             </>
           )}
-          
-          {/* Regular filtered results */}
-          {(inputValue.length > 0 ? filteredCities : 
-            filteredCities.filter(c => !recentCities.includes(c))
-          ).map((city, index) => (
-            <div
-              key={index}
-              className="px-3 py-2 cursor-pointer hover:bg-gray-100"
-              onClick={() => handleSelectCity(city)}
-            >
-              {city}
-            </div>
-          ))}
-          
-          {/* Help text for state search */}
-          {inputValue.length === 2 && STATE_ABBR[inputValue.toUpperCase()] && (
-            <div className="px-3 py-1 text-xs text-gray-500 bg-gray-50">
-              Showing cities in {STATE_ABBR[inputValue.toUpperCase()]}
-            </div>
+
+          {/* Search Mode */}
+          {displayMode === 'search' && (
+            <>
+              {/* Recent cities if available */}
+              {inputValue.length === 0 && recentCities.length > 0 && (
+                <>
+                  <div className="px-3 py-1 text-xs font-semibold text-gray-500 bg-gray-50">
+                    Recent Cities
+                  </div>
+                  {recentCities.filter(c => UNIQUE_CITIES.includes(c)).map((city, index) => (
+                    <div
+                      key={`recent-${index}`}
+                      className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSelectCity(city)}
+                    >
+                      {city}
+                    </div>
+                  ))}
+                </>
+              )}
+              
+              {/* Search results */}
+              {filteredCities.map((city, index) => (
+                <div
+                  key={index}
+                  className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSelectCity(city)}
+                >
+                  {city}
+                </div>
+              ))}
+              
+              {/* Help text for state search */}
+              {inputValue.length === 2 && STATE_ABBR[inputValue.toUpperCase()] && (
+                <div className="px-3 py-1 text-xs text-gray-500 bg-gray-50">
+                  Showing cities in {STATE_ABBR[inputValue.toUpperCase()]}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

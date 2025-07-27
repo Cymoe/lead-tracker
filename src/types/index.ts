@@ -1,3 +1,37 @@
+export interface AdCreative {
+  id: string;
+  type: 'image' | 'video' | 'carousel' | 'text';
+  imageUrl?: string;
+  videoUrl?: string;
+  thumbnailUrl?: string;
+  headline?: string;
+  primaryText?: string;
+  description?: string;
+  callToAction?: string;
+  linkUrl?: string;
+  createdAt?: string;
+  lastSeen?: string;
+  status?: 'active' | 'inactive' | 'paused';
+  impressions?: number;
+  spend?: string;
+  targeting?: {
+    locations?: string[];
+    ageRange?: string;
+    gender?: string;
+    interests?: string[];
+  };
+}
+
+export interface AdPlatformStatus {
+  platform: 'Google Ads' | 'Facebook Ads' | 'Instagram Ads' | 'Nextdoor' | 'LinkedIn Ads' | 'Twitter Ads' | 'Yelp Ads' | 'Angi Ads' | 'HomeAdvisor' | 'Thumbtack';
+  hasAds: boolean;
+  lastChecked: string;
+  adCount?: number;
+  adSpend?: string;
+  notes?: string;
+  ads?: AdCreative[];
+}
+
 export interface Lead {
   id: string;
   user_id: string;
@@ -16,6 +50,8 @@ export interface Lead {
   service_areas?: string | null;
   price_info?: string | null;
   ad_platform?: string | null;
+  ad_platforms?: AdPlatformStatus[];
+  total_ad_platforms?: number;
   dm_sent: boolean;
   dm_response?: string | null;
   called: boolean;

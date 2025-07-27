@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { useLeadStore } from '@/lib/store';
 import { Lead } from '@/types';
-import { CheckIcon, TrashIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, TrashIcon, PencilSquareIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
 import { deleteLead as deleteLeadAPI, deleteLeads as deleteLeadsAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
 import EditLeadModal from './modals/EditLeadModal';
 import BulkEditModal from './modals/BulkEditModal';
+import AdPlatformModal from './modals/AdPlatformModal';
+import AdViewerModal from './modals/AdViewerModal';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { getCategoryForBusiness } from '@/utils/grey-tsunami-business-types';
+import AdPlatformChecker from './AdPlatformChecker';
 
 export default function LeadTable() {
   const { leads, sourceFilter, deleteLead, selectedLeads: storeSelectedLeads, setSelectedLeads } = useLeadStore();
@@ -14,6 +18,10 @@ export default function LeadTable() {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
+  const [showAdPlatformModal, setShowAdPlatformModal] = useState(false);
+  const [adPlatformLeadId, setAdPlatformLeadId] = useState<string | null>(null);
+  const [showAdViewerModal, setShowAdViewerModal] = useState(false);
+  const [adViewerLead, setAdViewerLead] = useState<Lead | null>(null);
 
   const filteredLeads = leads.filter((lead) => {
     if (lead.lead_source === 'Instagram Manual' && !sourceFilter.instagram) return false;
@@ -186,6 +194,9 @@ export default function LeadTable() {
                   Ads
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Ad Platforms
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Notes
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -205,6 +216,14 @@ export default function LeadTable() {
                   onToggleSelect={() => toggleSelect(lead.id)}
                   onDelete={() => handleDeleteSingle(lead.id)}
                   onEdit={() => handleEditLead(lead)}
+                  onCheckPlatforms={(leadId) => {
+                    setAdPlatformLeadId(leadId);
+                    setShowAdPlatformModal(true);
+                  }}
+                  onViewAds={(lead) => {
+                    setAdViewerLead(lead);
+                    setShowAdViewerModal(true);
+                  }}
                 />
               ))}
             </tbody>
@@ -221,13 +240,31 @@ export default function LeadTable() {
         lead={editingLead} 
       />
 
-      <BulkEditModal
+            <BulkEditModal 
         open={showBulkEditModal}
         onClose={() => {
           setShowBulkEditModal(false);
           setSelectedLeads([]);
         }}
         selectedLeadIds={storeSelectedLeads}
+      />
+      
+      <AdPlatformModal
+        open={showAdPlatformModal}
+        onClose={() => {
+          setShowAdPlatformModal(false);
+          setAdPlatformLeadId(null);
+        }}
+        selectedLeadIds={adPlatformLeadId ? [adPlatformLeadId] : []}
+      />
+      
+      <AdViewerModal
+        open={showAdViewerModal}
+        onClose={() => {
+          setShowAdViewerModal(false);
+          setAdViewerLead(null);
+        }}
+        lead={adViewerLead}
       />
     </>
   );
@@ -239,9 +276,11 @@ interface LeadRowProps {
   onToggleSelect: () => void;
   onDelete: () => void;
   onEdit: () => void;
+  onCheckPlatforms: (leadId: string) => void;
+  onViewAds: (lead: Lead) => void;
 }
 
-function LeadRow({ lead, selected, onToggleSelect, onDelete, onEdit }: LeadRowProps) {
+function LeadRow({ lead, selected, onToggleSelect, onDelete, onEdit, onCheckPlatforms, onViewAds }: LeadRowProps) {
   return (
     <tr className="hover:bg-gray-50">
       <td className="px-6 py-4 whitespace-nowrap">
@@ -260,7 +299,17 @@ function LeadRow({ lead, selected, onToggleSelect, onDelete, onEdit }: LeadRowPr
         <div className="text-sm font-medium text-gray-900">{lead.company_name}</div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer" onClick={onEdit}>
-        {lead.service_type}
+        <div className="relative group">
+          <span>{lead.service_type}</span>
+          {lead.service_type && getCategoryForBusiness(lead.service_type) && (
+            <div className="absolute z-10 hidden group-hover:block bottom-full left-0 mb-1 p-2 bg-gray-900 text-white text-xs rounded shadow-lg w-64">
+              <div className="font-semibold">{getCategoryForBusiness(lead.service_type)?.tier}</div>
+              <div>{getCategoryForBusiness(lead.service_type)?.category}</div>
+              <div className="text-gray-300 mt-1">{getCategoryForBusiness(lead.service_type)?.description}</div>
+              <div className="text-yellow-300 mt-1">Acquisition Score: {getCategoryForBusiness(lead.service_type)?.acquisitionScore}/10</div>
+            </div>
+          )}
+        </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer" onClick={onEdit}>
         {lead.city}
@@ -289,6 +338,13 @@ function LeadRow({ lead, selected, onToggleSelect, onDelete, onEdit }: LeadRowPr
         {lead.running_ads && <CheckIcon className="h-5 w-5 text-green-500" />}
         {!lead.running_ads && <span className="text-red-500">✗</span>}
       </td>
+      <td className="px-6 py-4 whitespace-nowrap text-sm cursor-pointer" onClick={onEdit}>
+        <AdPlatformChecker 
+          platforms={lead.ad_platforms} 
+          compact={true}
+          onViewAds={() => onViewAds(lead)}
+        />
+      </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer" onClick={onEdit}>
         <div className="max-w-xs truncate" title={lead.notes || undefined}>
           {lead.notes || '-'}
@@ -302,16 +358,28 @@ function LeadRow({ lead, selected, onToggleSelect, onDelete, onEdit }: LeadRowPr
         )}
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="text-red-600 hover:text-red-900"
-          title="Delete lead"
-        >
-          <TrashIcon className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onCheckPlatforms(lead.id);
+            }}
+            className="text-blue-600 hover:text-blue-900"
+            title="Check ad platforms"
+          >
+            <GlobeAltIcon className="h-5 w-5" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="text-red-600 hover:text-red-900"
+            title="Delete lead"
+          >
+            <TrashIcon className="h-5 w-5" />
+          </button>
+        </div>
       </td>
     </tr>
   );

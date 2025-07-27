@@ -18,7 +18,8 @@ import CloseCRMExportModal from '@/components/modals/CloseCRMExportModal';
 import GoogleSheetsSyncModal from '@/components/modals/GoogleSheetsSyncModal';
 import DuplicateDetectionModal from '@/components/modals/DuplicateDetectionModal';
 import CSVImportModal from '@/components/modals/CSVImportModal';
-import AnalyticsDashboardModal from '@/components/modals/AnalyticsDashboardModal';
+import AdPlatformModal from '@/components/modals/AdPlatformModal';
+
 import { fetchLeads } from '@/lib/api';
 import { exportToGoogleSheets, exportToCSV } from '@/utils/export';
 
@@ -26,6 +27,16 @@ export default function HomePage() {
   const { setLeads, leads, selectedLeads, setSelectedLeads } = useLeadStore();
   const { user, loading } = useAuth();
   const router = useRouter();
+  
+  // Sidebar collapse state
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    // Load from localStorage on initial mount
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('sidebarCollapsed');
+      return saved === 'true';
+    }
+    return false;
+  });
   
   // Modal states
   const [showAddLead, setShowAddLead] = useState(false);
@@ -37,7 +48,30 @@ export default function HomePage() {
   const [showGoogleSheetsSync, setShowGoogleSheetsSync] = useState(false);
   const [showDuplicateDetection, setShowDuplicateDetection] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showAdPlatformCheck, setShowAdPlatformCheck] = useState(false);
+  const [marketAnalysisSelection, setMarketAnalysisSelection] = useState<any>(null);
+
+  // Save sidebar state to localStorage
+  useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', isSidebarCollapsed.toString());
+  }, [isSidebarCollapsed]);
+
+  // Check for market analysis selection on load
+  useEffect(() => {
+    const selection = localStorage.getItem('marketAnalysisSelection');
+    if (selection) {
+      try {
+        const data = JSON.parse(selection);
+        setMarketAnalysisSelection(data);
+        // Remove it so it doesn't persist on refresh
+        localStorage.removeItem('marketAnalysisSelection');
+        // Open the add lead modal with pre-filled data
+        setShowAddLead(true);
+      } catch (error) {
+        console.error('Error parsing market analysis selection:', error);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -92,9 +126,13 @@ export default function HomePage() {
     }
   };
 
+  const handleToggleSidebar = () => {
+    setIsSidebarCollapsed(!isSidebarCollapsed);
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading...</p>
@@ -113,13 +151,18 @@ export default function HomePage() {
         onAddLead={() => setShowAddLead(true)}
         onGoogleSheetsSync={() => setShowGoogleSheetsSync(true)}
         onDuplicateDetection={() => setShowDuplicateDetection(true)}
-        onAnalytics={() => setShowAnalytics(true)}
+        onAnalytics={() => {}} // No longer needed, handled by routing
         onSettings={() => setShowSettings(true)}
         onBulkEdit={() => setShowBulkEdit(true)}
+        onAdPlatformCheck={() => setShowAdPlatformCheck(true)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={handleToggleSidebar}
       />
       
-      <div className="lg:pl-72">
-        <main className="py-10">
+      <div className={`transition-all duration-300 ${
+        isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-72'
+      }`}>
+        <main className="py-10 bg-gray-50 min-h-screen">
           <div className="px-4 sm:px-6 lg:px-8">
             <SimpleHeader 
               onBulkImport={() => setShowBulkImport(true)}
@@ -136,7 +179,14 @@ export default function HomePage() {
       </div>
       
       {/* Modals */}
-      <AddLeadModal open={showAddLead} onClose={() => setShowAddLead(false)} />
+      <AddLeadModal 
+        open={showAddLead} 
+        onClose={() => {
+          setShowAddLead(false);
+          setMarketAnalysisSelection(null);
+        }}
+        marketAnalysisData={marketAnalysisSelection}
+      />
       <BulkImportModal open={showBulkImport} onClose={() => setShowBulkImport(false)} />
       <BulkEditModal 
         open={showBulkEdit} 
@@ -152,7 +202,11 @@ export default function HomePage() {
       <GoogleSheetsSyncModal open={showGoogleSheetsSync} onClose={() => setShowGoogleSheetsSync(false)} />
       <DuplicateDetectionModal open={showDuplicateDetection} onClose={() => setShowDuplicateDetection(false)} />
       <CSVImportModal open={showCSVImport} onClose={() => setShowCSVImport(false)} />
-      <AnalyticsDashboardModal open={showAnalytics} onClose={() => setShowAnalytics(false)} />
+      <AdPlatformModal 
+        open={showAdPlatformCheck} 
+        onClose={() => setShowAdPlatformCheck(false)} 
+        selectedLeadIds={selectedLeads}
+      />
     </>
   );
 }

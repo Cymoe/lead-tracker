@@ -5,7 +5,7 @@ import { useLeadStore } from '@/lib/store';
 import { updateLead, updateLeads } from '@/lib/api';
 import { Lead } from '@/types';
 import toast from 'react-hot-toast';
-import SimpleCitySearch from '../SimpleCitySearch';
+import USCityAutocomplete from '../USCityAutocomplete';
 
 interface BulkEditModalProps {
   open: boolean;
@@ -277,11 +277,12 @@ export default function BulkEditModal({ open, onClose, selectedLeadIds }: BulkEd
                             </div>
                             {updates.city.enabled && (
                               <div className="ml-6">
-                                <SimpleCitySearch
+                                <USCityAutocomplete
                                   value={updates.city.value}
                                   onChange={(value) => handleFieldChange('city', value)}
-                                  placeholder="Type or select a city..."
+                                  placeholder="Type city name or state code..."
                                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                  required={false}
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
                                   Current: {getCommonValue('city')}

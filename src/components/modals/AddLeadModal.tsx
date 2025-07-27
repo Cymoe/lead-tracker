@@ -1,33 +1,34 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useLeadStore } from '@/lib/store';
 import { saveLead } from '@/lib/api';
 import { Lead } from '@/types';
 import toast from 'react-hot-toast';
-import SimpleCitySearch from '../SimpleCitySearch';
+import USCityAutocomplete from '../USCityAutocomplete';
+import ServiceTypeDropdown from '../ServiceTypeDropdown';
 
 interface AddLeadModalProps {
   open: boolean;
   onClose: () => void;
+  marketAnalysisData?: {
+    county: string;
+    state: string;
+    fipsCode: string;
+    businessTypes: string[];
+  };
 }
 
-const SERVICE_TYPES = [
-  'Turf', 'Painting', 'Remodeling', 'Landscaping', 'Roofing',
-  'Plumbing', 'Electrical', 'HVAC', 'Concrete', 'Fencing',
-  'Pool Service', 'Pest Control', 'Cleaning Service', 'Tree Service'
-];
+// Removed - now using ServiceTypeAutocomplete
 
-export default function AddLeadModal({ open, onClose }: AddLeadModalProps) {
+export default function AddLeadModal({ open, onClose, marketAnalysisData }: AddLeadModalProps) {
   const { addLead } = useLeadStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showCustomService, setShowCustomService] = useState(false);
   
   const [formData, setFormData] = useState({
     handle: '',
     companyName: '',
-    serviceType: 'Turf',
-    customServiceType: '',
+    serviceType: '',
     city: '',
     phone: '',
     website: '',
@@ -36,19 +37,28 @@ export default function AddLeadModal({ open, onClose }: AddLeadModalProps) {
     notes: '',
   });
 
+  // Update form when market analysis data is provided
+  useEffect(() => {
+    if (marketAnalysisData && open) {
+      setFormData(prev => ({
+        ...prev,
+        city: `${marketAnalysisData.county}, ${marketAnalysisData.state}`,
+        serviceType: marketAnalysisData.businessTypes[0] || prev.serviceType,
+        notes: `Lead from ${marketAnalysisData.county} County market analysis. Target industries: ${marketAnalysisData.businessTypes.join(', ')}`
+      }));
+    }
+  }, [marketAnalysisData, open]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      const serviceType = formData.serviceType === 'Other' 
-        ? formData.customServiceType 
-        : formData.serviceType;
 
       const newLead = {
         ...formData,
         company_name: formData.companyName,
-        service_type: serviceType,
+        service_type: formData.serviceType,
         lead_source: formData.leadSource,
         running_ads: formData.runningAds,
         instagram_url: formData.handle 
@@ -73,8 +83,7 @@ export default function AddLeadModal({ open, onClose }: AddLeadModalProps) {
     setFormData({
       handle: '',
       companyName: '',
-      serviceType: 'Turf',
-      customServiceType: '',
+      serviceType: '',
       city: '',
       phone: '',
       website: '',
@@ -82,7 +91,6 @@ export default function AddLeadModal({ open, onClose }: AddLeadModalProps) {
       runningAds: false,
       notes: '',
     });
-    setShowCustomService(false);
   };
 
   return (
@@ -130,6 +138,14 @@ export default function AddLeadModal({ open, onClose }: AddLeadModalProps) {
                           Add New Lead
                         </Dialog.Title>
                         
+                        {marketAnalysisData && (
+                          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                            <p className="text-sm text-blue-800">
+                              🎯 Pre-filled from <strong>{marketAnalysisData.county} County</strong> market analysis
+                            </p>
+                          </div>
+                        )}
+                        
                         <div className="mt-4 space-y-4">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
@@ -162,42 +178,25 @@ export default function AddLeadModal({ open, onClose }: AddLeadModalProps) {
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <label className="block text-sm font-medium text-gray-700">
-                                Service Type*
+                                Business Type*
                               </label>
-                              <select
-                                required
+                              <ServiceTypeDropdown
                                 value={formData.serviceType}
-                                onChange={(e) => {
-                                  setFormData({ ...formData, serviceType: e.target.value });
-                                  setShowCustomService(e.target.value === 'Other');
-                                }}
+                                onChange={(value) => setFormData({ ...formData, serviceType: value })}
+                                placeholder="Search SMB acquisition targets..."
                                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                              >
-                                {SERVICE_TYPES.map(type => (
-                                  <option key={type} value={type}>{type}</option>
-                                ))}
-                                <option value="Other">Other (specify below)</option>
-                              </select>
-                              {showCustomService && (
-                                <input
-                                  type="text"
-                                  required
-                                  value={formData.customServiceType}
-                                  onChange={(e) => setFormData({ ...formData, customServiceType: e.target.value })}
-                                  placeholder="Enter custom service type"
-                                  className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                />
-                              )}
+                                required
+                              />
                             </div>
                             
                             <div>
                               <label className="block text-sm font-medium text-gray-700">
                                 City*
                               </label>
-                              <SimpleCitySearch
+                              <USCityAutocomplete
                                 value={formData.city}
                                 onChange={(value) => setFormData({ ...formData, city: value })}
-                                placeholder="Type or select a city..."
+                                placeholder="Type city name or state code..."
                                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                 required
                               />
