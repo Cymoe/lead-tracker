@@ -19,6 +19,8 @@ import GoogleSheetsSyncModal from '@/components/modals/GoogleSheetsSyncModal';
 import DuplicateDetectionModal from '@/components/modals/DuplicateDetectionModal';
 import CSVImportModal from '@/components/modals/CSVImportModal';
 import AdPlatformModal from '@/components/modals/AdPlatformModal';
+import GoogleMapsImportModal from '@/components/modals/GoogleMapsImportModal';
+import FacebookAdsSearchModal from '@/components/modals/FacebookAdsSearchModal';
 
 import { fetchLeads } from '@/lib/api';
 import { exportToGoogleSheets, exportToCSV } from '@/utils/export';
@@ -48,6 +50,8 @@ export default function HomePage() {
   const [showGoogleSheetsSync, setShowGoogleSheetsSync] = useState(false);
   const [showDuplicateDetection, setShowDuplicateDetection] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
+  const [showGoogleMapsImport, setShowGoogleMapsImport] = useState(false);
+  const [showFacebookAdsSearch, setShowFacebookAdsSearch] = useState(false);
   const [showAdPlatformCheck, setShowAdPlatformCheck] = useState(false);
   const [marketAnalysisSelection, setMarketAnalysisSelection] = useState<any>(null);
 
@@ -167,6 +171,8 @@ export default function HomePage() {
             <SimpleHeader 
               onBulkImport={() => setShowBulkImport(true)}
               onCSVImport={() => setShowCSVImport(true)}
+              onGoogleMapsImport={() => setShowGoogleMapsImport(true)}
+              onFacebookAdsSearch={() => setShowFacebookAdsSearch(true)}
               onGoogleSheetsExport={handleGoogleSheetsExport}
               onCSVExport={() => exportToCSV(leads)}
               onCloseCRMExport={() => setShowCloseCRMExport(true)}
@@ -206,6 +212,14 @@ export default function HomePage() {
         open={showAdPlatformCheck} 
         onClose={() => setShowAdPlatformCheck(false)} 
         selectedLeadIds={selectedLeads}
+      />
+      <GoogleMapsImportModal 
+        open={showGoogleMapsImport} 
+        onClose={() => setShowGoogleMapsImport(false)} 
+      />
+      <FacebookAdsSearchModal 
+        open={showFacebookAdsSearch} 
+        onClose={() => setShowFacebookAdsSearch(false)} 
       />
     </>
   );

@@ -7,6 +7,7 @@ import {
   EllipsisVerticalIcon,
   MapIcon
 } from '@heroicons/react/24/outline';
+import { FaFacebook } from 'react-icons/fa';
 import Link from 'next/link';
 import { Menu, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
@@ -14,6 +15,8 @@ import { Fragment } from 'react';
 interface SimpleHeaderProps {
   onBulkImport: () => void;
   onCSVImport: () => void;
+  onGoogleMapsImport: () => void;
+  onFacebookAdsSearch: () => void;
   onGoogleSheetsExport: () => void;
   onCSVExport: () => void;
   onCloseCRMExport: () => void;
@@ -22,6 +25,8 @@ interface SimpleHeaderProps {
 export default function SimpleHeader({
   onBulkImport,
   onCSVImport,
+  onGoogleMapsImport,
+  onFacebookAdsSearch,
   onGoogleSheetsExport,
   onCSVExport,
   onCloseCRMExport,
@@ -78,6 +83,32 @@ export default function SimpleHeader({
                     >
                       <DocumentArrowUpIcon className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500 flex-shrink-0" />
                       <span className="truncate">CSV File</span>
+                    </button>
+                  )}
+                </Menu.Item>
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      onClick={onGoogleMapsImport}
+                      className={`${
+                        active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
+                      } group flex items-center px-4 py-2 text-sm w-full text-left transition-colors`}
+                    >
+                      <MapIcon className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500 flex-shrink-0" />
+                      <span className="truncate">Google Maps</span>
+                    </button>
+                  )}
+                </Menu.Item>
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      onClick={onFacebookAdsSearch}
+                      className={`${
+                        active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
+                      } group flex items-center px-4 py-2 text-sm w-full text-left transition-colors`}
+                    >
+                      <FaFacebook className="mr-3 h-5 w-5 text-[#1877F2] group-hover:text-[#1877F2]/80 flex-shrink-0" />
+                      <span className="truncate">Facebook Ads</span>
                     </button>
                   )}
                 </Menu.Item>

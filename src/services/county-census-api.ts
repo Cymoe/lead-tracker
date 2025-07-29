@@ -395,6 +395,15 @@ class CountyCensusAPI {
 
   // Get Grey Tsunami industries data for a county
   async getCountyGreyTsunamiIndustries(countyFips: string): Promise<GreyTsunamiIndustryData> {
+    // DISABLED FOR PERFORMANCE - Return empty data immediately
+    console.log(`[Census API] Industry data fetching DISABLED for performance`);
+    return {
+      fipsCode: countyFips,
+      countyName: '',
+      industries: {},
+      totalGreyTsunamiEstablishments: 0
+    };
+    
     console.log(`[Census API] Fetching Grey Tsunami industry data for county ${countyFips}`);
     
     // Get county name first

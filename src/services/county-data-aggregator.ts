@@ -246,35 +246,7 @@ class CountyDataAggregator {
         let topIndustries: string[] = [];
         let industryConcentration = new Map<string, number>();
         
-        // Only fetch industry data if we have tier filters or need accurate data
-        if (filter?.greyTsunamiTiers && filter.greyTsunamiTiers.length > 0) {
-          try {
-            industryData = await this.fetchCachedIndustryData(fips);
-            if (industryData && industryData.totalGreyTsunamiEstablishments > 0) {
-              hasRealIndustryData = true;
-              topIndustries = this.extractTopIndustriesFromData(industryData);
-              
-              // Check if any of the top industries match the requested tiers
-              const matchesTiers = topIndustries.some(industry => {
-                const category = GREY_TSUNAMI_CATEGORIES.find(cat => 
-                  cat.businesses.some(biz => biz.toLowerCase() === industry.toLowerCase())
-                );
-                return category && filter.greyTsunamiTiers!.includes(category.tier);
-              });
-              
-              if (!matchesTiers) {
-                return null; // Skip this county if it doesn't match tier filter
-              }
-              
-              // Build industry concentration map
-              Object.entries(industryData.industries).forEach(([category, data]) => {
-                industryConcentration.set(category, data.totalEstablishments);
-              });
-            }
-          } catch (error) {
-            console.warn(`Failed to fetch industry data for filtering, using estimates`, error);
-          }
-        }
+        // SKIP industry data fetching completely - just use estimates
         
         // Fall back to estimates if no real data
         if (!hasRealIndustryData) {
@@ -392,25 +364,8 @@ class CountyDataAggregator {
 
   // Fetch cached industry data
   private async fetchCachedIndustryData(fipsCode: string): Promise<GreyTsunamiIndustryData | null> {
-    // Check cache first
-    const cached = this.industryDataCache.get(fipsCode);
-    if (cached && Date.now() - cached.timestamp < this.industryDataCacheExpiry) {
-      console.log(`[Aggregator] Using cached industry data for ${fipsCode}`);
-      return cached.data;
-    }
-
-    try {
-      // Fetch fresh data
-      const data = await countyCensusAPI.getCountyGreyTsunamiIndustries(fipsCode);
-      
-      // Cache the result
-      this.industryDataCache.set(fipsCode, { data, timestamp: Date.now() });
-      
-      return data;
-    } catch (error) {
-      console.error(`[Aggregator] Error fetching industry data for ${fipsCode}:`, error);
-      return null;
-    }
+    // DISABLED FOR PERFORMANCE - Always return null
+    return null;
   }
 
   // Extract top industries from real industry data
