@@ -73,13 +73,17 @@ export default function FacebookAdsSearchModal({ open, onClose }: FacebookAdsSea
         if (data.setupInstructions) {
           setApiKeyError(true);
         }
-        throw new Error(data.error || 'Search failed');
+        const errorMsg = data.details ? `${data.error}: ${data.details}` : data.error;
+        if (data.hint) {
+          toast.error(data.hint);
+        }
+        throw new Error(errorMsg || 'Search failed');
       }
 
       setResults(data.results);
       
       // Auto-select high quality ads
-      const highQualityIds = new Set(
+      const highQualityIds = new Set<string>(
         data.results
           .filter((r: FacebookAdResult) => r.quality_score >= 80)
           .map((r: FacebookAdResult) => r.id)

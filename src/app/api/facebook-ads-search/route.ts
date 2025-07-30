@@ -45,13 +45,28 @@ export async function POST(request: NextRequest) {
     const scrapingBeeKey = process.env.SCRAPINGBEE_API_KEY;
     
     if (!scrapingBeeKey) {
+      console.error('ScrapingBee API key not found in environment variables');
       return NextResponse.json({ 
         error: 'ScrapingBee API key not configured. Please add SCRAPINGBEE_API_KEY to your .env.local file',
         setupInstructions: true 
       }, { status: 500 });
     }
     
+    console.log(`ScrapingBee API Key: ${scrapingBeeKey.substring(0, 10)}...`);
     console.log(`Searching Facebook Ad Library for: ${keyword} in ${location}`);
+    
+    // Test mode for development
+    const testMode = keyword.toLowerCase() === 'test';
+    if (testMode) {
+      console.log('Running in test mode with mock data');
+      const mockResults = generateMockResults(keyword, location, limit);
+      return NextResponse.json({ 
+        results: mockResults,
+        total: mockResults.length,
+        search_params: { keyword, location, limit },
+        test_mode: true
+      });
+    }
     
     // Build the Facebook Ad Library URL
     const searchUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&q=${encodeURIComponent(keyword)}&search_type=keyword_unordered&media_type=all`;
@@ -62,8 +77,6 @@ export async function POST(request: NextRequest) {
       url: searchUrl,
       render_js: 'true',
       wait: '5000',
-      wait_for: '.x1xka2u1', // Wait for ad containers
-      scroll: 'true', // Enable auto-scrolling
       js_scenario: JSON.stringify({
         instructions: [
           { wait: 2000 },
@@ -72,16 +85,22 @@ export async function POST(request: NextRequest) {
           { scroll_y: 2000 },
           { wait: 2000 },
           { scroll_y: 3000 },
+          { wait: 2000 },
+          { scroll_y: 4000 },
           { wait: 2000 }
         ]
       })
     }).toString());
     
     if (!response.ok) {
-      throw new Error(`ScrapingBee request failed: ${response.statusText}`);
+      const errorText = await response.text();
+      console.error('ScrapingBee error response:', errorText);
+      console.error('Response status:', response.status);
+      throw new Error(`ScrapingBee request failed: ${response.statusText} - ${errorText}`);
     }
     
     const html = await response.text();
+    console.log('Received HTML length:', html.length);
     
     // Parse the Facebook Ad Library results
     const results = parseFacebookAds(html, location, limit);
@@ -116,75 +135,106 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('Error searching Facebook ads:', error);
-    return NextResponse.json({ error: 'Failed to search Facebook ads' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ 
+      error: 'Failed to search Facebook ads',
+      details: errorMessage,
+      hint: errorMessage.includes('401') ? 'Invalid API key - please check your ScrapingBee API key' : 
+            errorMessage.includes('402') ? 'ScrapingBee credits exhausted - please check your account' :
+            errorMessage.includes('429') ? 'Rate limit exceeded - please try again in a moment' :
+            'Check server logs for more details'
+    }, { status: 500 });
   }
 }
 
 function parseFacebookAds(html: string, location: string, limit: number): FacebookAdResult[] {
   const results: FacebookAdResult[] = [];
   
-  // Extract ads using regex patterns (Facebook's class names are obfuscated)
-  // Look for ad containers
-  const adPattern = /<div[^>]*class="[^"]*x1xka2u1[^"]*"[^>]*>([\s\S]*?)<\/div>/g;
-  const matches = Array.from(html.matchAll(adPattern));
+  console.log('Starting to parse Facebook ads from HTML...');
   
-  for (const match of matches) {
-    const adHtml = match[1];
-    
-    // Extract page name
-    const pageNameMatch = adHtml.match(/<span[^>]*>([^<]+)<\/span>/);
-    if (!pageNameMatch) continue;
-    
-    const pageName = pageNameMatch[1].trim();
-    
-    // Skip if it's not a business name (filter out UI elements)
-    if (pageName.length < 3 || pageName.includes('Sponsored') || pageName.includes('Ad Library')) {
-      continue;
+  // First, check if we're on the Ad Library page
+  if (html.includes('Ad Library') || html.includes('Ads about social issues')) {
+    console.log('Confirmed: Facebook Ad Library page detected');
+  }
+  
+  // Try multiple parsing strategies
+  
+  // Strategy 1: Look for advertiser names with common patterns
+  const advertiserPatterns = [
+    /data-testid="[^"]*"[^>]*>([^<]+(?:LLC|Inc|Corp|Co\.|Company|Services?|Plumbing|HVAC|Landscaping|Roofing|Electrical|Painting|Construction|Contractors?|Repair|Maintenance)[^<]*)</gi,
+    /<a[^>]*href="[^"]*facebook\.com[^"]*"[^>]*>([^<]+)<\/a>/gi,
+    /<span[^>]*>([A-Z][^<]+(?:LLC|Inc|Corp|Services?|Plumbing|HVAC|Landscaping|Roofing)[^<]*)<\/span>/gi
+  ];
+  
+  const foundNames = new Set<string>();
+  
+  for (const pattern of advertiserPatterns) {
+    const matches = Array.from(html.matchAll(pattern));
+    for (const match of matches) {
+      const name = match[1].trim();
+      // Filter out UI elements and common false positives
+      if (name.length > 3 && 
+          !name.includes('Facebook') && 
+          !name.includes('Meta') && 
+          !name.includes('Ad Library') &&
+          !name.includes('See more') &&
+          !name.includes('Filter') &&
+          !name.includes('Search') &&
+          !name.includes('Loading') &&
+          !name.includes('Privacy') &&
+          !name.includes('Terms') &&
+          !name.includes('Settings')) {
+        foundNames.add(name);
+      }
     }
-    
-    // Extract ad text
-    const adTextMatch = adHtml.match(/<div[^>]*class="[^"]*xdj266r[^"]*"[^>]*>([^<]+)<\/div>/);
-    const adText = adTextMatch ? adTextMatch[1].trim() : '';
-    
-    // Extract CTA
-    const ctaMatch = adHtml.match(/<div[^>]*role="button"[^>]*>([^<]+)<\/div>/);
-    const cta = ctaMatch ? ctaMatch[1].trim() : '';
-    
-    // Extract started running date
-    const dateMatch = adHtml.match(/Started running on ([^<]+)/);
-    const startedRunning = dateMatch ? dateMatch[1].trim() : '';
+  }
+  
+  console.log(`Found ${foundNames.size} potential advertisers`);
+  
+  // Convert found names to results
+  let index = 0;
+  const namesArray = Array.from(foundNames);
+  for (const name of namesArray) {
+    if (index >= limit) break;
     
     results.push({
-      id: `fb_${Date.now()}_${results.length}`,
-      page_name: pageName,
-      ad_creative_body: adText,
-      call_to_action: cta,
-      started_running: startedRunning,
+      id: `fb_${Date.now()}_${index}`,
+      page_name: name,
+      ad_creative_body: '', // We'll try to extract this in a future update
+      call_to_action: '',
+      started_running: '',
       targeting: {
         location: [location]
       }
     });
-    
-    if (results.length >= limit) break;
+    index++;
   }
   
-  // If parsing failed, try alternative approach
-  if (results.length === 0) {
-    // Look for any text that might be business names
-    const businessNamePattern = /(?:LLC|Inc|Corp|Co\.|Company|Services?|Plumbing|HVAC|Landscaping|Roofing|Electrical|Painting|Construction|Contractors?|Repair|Maintenance)\b/gi;
-    const potentialNames = html.match(/([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*(?:LLC|Inc|Corp|Co\.|Company|Services?)/g) || [];
+  // If we didn't find enough results, try a simpler approach
+  if (results.length < 5) {
+    console.log('Trying fallback parsing strategy...');
     
-    for (const name of potentialNames.slice(0, limit)) {
-      results.push({
-        id: `fb_${Date.now()}_${results.length}`,
-        page_name: name.trim(),
-        targeting: {
-          location: [location]
-        }
-      });
+    // Look for any business-like names
+    const simplePattern = /([A-Z][a-zA-Z\s&'-]+)\s+(Services?|LLC|Inc|Corp|Co\.|Company|Plumbing|HVAC|AC|Air|Landscaping|Lawn|Roofing|Roof|Electrical|Electric|Painting|Paint|Construction|Contractor|Repair|Maintenance)/g;
+    const simpleMatches = Array.from(html.matchAll(simplePattern));
+    
+    for (const match of simpleMatches) {
+      if (results.length >= limit) break;
+      
+      const fullName = match[0].trim();
+      if (!foundNames.has(fullName)) {
+        results.push({
+          id: `fb_${Date.now()}_${results.length}`,
+          page_name: fullName,
+          targeting: {
+            location: [location]
+          }
+        });
+      }
     }
   }
   
+  console.log(`Final result count: ${results.length}`);
   return results;
 }
 
@@ -289,4 +339,48 @@ function generateNotes(ad: FacebookAdResult): string {
   }
   
   return notes.join('. ');
+}
+
+function generateMockResults(keyword: string, location: string, limit: number): any[] {
+  const mockBusinessTypes = [
+    'Plumbing', 'HVAC', 'Landscaping', 'Roofing', 'Electrical',
+    'Painting', 'Concrete', 'Pool Service', 'Pest Control', 'Remodeling'
+  ];
+  
+  const mockResults = [];
+  const count = Math.min(limit, 20);
+  
+  for (let i = 0; i < count; i++) {
+    const businessType = mockBusinessTypes[i % mockBusinessTypes.length];
+    const days = Math.floor(Math.random() * 180) + 1;
+    const score = Math.floor(Math.random() * 40) + 60;
+    
+    mockResults.push({
+      id: `fb_test_${i}`,
+      page_name: `${location.split(',')[0]} ${businessType} Services ${i + 1}`,
+      ad_creative_body: `Professional ${businessType.toLowerCase()} services in ${location}. Licensed and insured. Call today for a free estimate!`,
+      call_to_action: 'Learn More',
+      started_running: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toLocaleDateString(),
+      import_ready: {
+        company_name: `${location.split(',')[0]} ${businessType} Services ${i + 1}`,
+        service_type: businessType,
+        lead_source: 'FB Ad Library',
+        running_ads: true,
+        ad_start_date: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toLocaleDateString(),
+        ad_copy: `Professional ${businessType.toLowerCase()} services in ${location}`,
+        ad_call_to_action: 'Learn More',
+        notes: `Running ads for ${days} days`,
+        city: location.split(',')[0].trim(),
+        state: location.split(',')[1]?.trim() || ''
+      },
+      quality_score: score,
+      signals: [
+        score >= 80 ? '✅ Professional Ad' : '',
+        days > 30 ? `📅 Active ${days} days` : '',
+        '📝 Detailed Ad Copy'
+      ].filter(Boolean)
+    });
+  }
+  
+  return mockResults;
 } 
