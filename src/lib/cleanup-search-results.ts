@@ -7,7 +7,7 @@ import { cookies } from 'next/headers';
  */
 export async function cleanupExpiredSearchResults() {
   const cookieStore = cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = createClient();
 
   try {
     // Call the cleanup function we created in the migration

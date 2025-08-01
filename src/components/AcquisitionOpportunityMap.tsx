@@ -255,7 +255,7 @@ export default function AcquisitionOpportunityMap({ selectedIndustry, onCitySele
           <div className="flex items-center gap-4">
             <span>
               Total Opportunities: <strong className="text-white">
-                {markets.reduce((sum, m) => sum + m.businessCount, 0).toLocaleString()}
+                {markets.reduce((sum, m) => sum + m.topIndustries.reduce((total, industry) => total + industry.businessCount, 0), 0).toLocaleString()}
               </strong>
             </span>
             <span className="border-l pl-4 text-gray-500">

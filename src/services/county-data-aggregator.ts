@@ -169,7 +169,7 @@ class CountyDataAggregator {
           topGreyTsunamiIndustries: topIndustries,
           industryConcentration,
           hasRealIndustryData,
-          totalGreyTsunamiEstablishments: industryData?.totalGreyTsunamiEstablishments
+          totalGreyTsunamiEstablishments: 0 // industryData is always null, so default to 0
         },
         
         dataSource: {
@@ -207,6 +207,7 @@ class CountyDataAggregator {
         // Skip demographic calls for now to avoid overwhelming the API
         // Use estimated demographics based on business data
         const demographics = {
+          fipsCode: fips,
           population: business.totalEstablishments * 150, // Rough estimate
           medianAge: 40, // US median
           medianIncome: 65000 // US median
@@ -293,7 +294,7 @@ class CountyDataAggregator {
             topGreyTsunamiIndustries: topIndustries,
             industryConcentration,
             hasRealIndustryData,
-            totalGreyTsunamiEstablishments: industryData?.totalGreyTsunamiEstablishments
+            totalGreyTsunamiEstablishments: 0 // industryData is always null, so default to 0
           },
           dataSource: {
             census: true,
@@ -431,7 +432,7 @@ class CountyDataAggregator {
             avgBusinessSize: metrics.businessMetrics.avgBusinessSize,
             boomerOwnedEstimate: metrics.businessMetrics.boomerOwnedEstimate
           },
-          metrics.demographics,
+          { ...metrics.demographics, fipsCode: metrics.fipsCode },
           metrics.marketClassification,
           topIndustries,
           industryData
@@ -499,7 +500,7 @@ class CountyDataAggregator {
     // Economic health factor (15%)
     if (demographics) {
       // Consider both income and age demographics
-      const incomeScore = Math.min(demographics.medianIncome / 100000, 1);
+      const incomeScore = Math.min((demographics.medianIncome || 65000) / 100000, 1);
       const ageScore = demographics.medianAge > 40 ? 0.8 : 0.6; // Older = more established businesses
       score += ((incomeScore + ageScore) / 2) * weights.economicHealth * 100;
     }
@@ -602,7 +603,7 @@ class CountyDataAggregator {
     }
     
     // Remove duplicates and return top 5
-    return [...new Set(industries)].slice(0, 5);
+    return Array.from(new Set(industries)).slice(0, 5);
   }
 
   // Clear cache

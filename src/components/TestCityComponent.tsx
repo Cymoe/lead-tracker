@@ -21,7 +21,7 @@ export default function TestCityComponent() {
       
       setResults(caCities.slice(0, 10)); // Show first 10 CA cities
     } catch (err) {
-      setError(err.message);
+      setError(err instanceof Error ? err.message : 'An error occurred');
       console.error('Error:', err);
     }
     setLoading(false);

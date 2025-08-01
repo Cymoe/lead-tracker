@@ -57,8 +57,8 @@ export default function CommandPalette({
   } = useLeadStore();
 
   // Extract unique cities and service types
-  const cities = Array.from(new Set(leads.map(l => l.city).filter(Boolean)));
-  const serviceTypes = Array.from(new Set(leads.map(l => l.service_type).filter(Boolean)));
+  const cities = Array.from(new Set(leads.map(l => l.city).filter((city): city is string => Boolean(city))));
+  const serviceTypes = Array.from(new Set(leads.map(l => l.service_type).filter((type): type is string => Boolean(type))));
 
   const commands: CommandItem[] = [
     // Navigation

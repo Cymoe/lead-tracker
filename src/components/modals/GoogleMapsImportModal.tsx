@@ -148,7 +148,7 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
     }
   };
 
-  const saveSearchResults = async (searchResults: PlaceResult[], searchParams: any, mode: string, estimate?: CostEstimate | null) => {
+  const saveSearchResults = async (searchResults: PlaceResult[], searchParams: any, mode: string, estimate?: CostEstimate | null, searchDuration?: number, apifyRunId?: string) => {
     try {
       const response = await fetch('/api/search-results', {
         method: 'POST',
@@ -158,7 +158,9 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
           searchParams,
           results: searchResults,
           searchMode: mode,
-          costEstimate: estimate
+          costEstimate: estimate,
+          searchDuration,
+          apifyRunId
         })
       });
       
@@ -284,6 +286,7 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
     setIsSearching(true);
     setApiKeyError(false);
     setHasSearched(true);
+    const searchStartTime = Date.now();
 
     try {
       // For Apify with contact extraction, use the polling approach
@@ -356,7 +359,6 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
               searchDuration,
               runId
             );
-            setCurrentApifyRunId(runId);
           } else if (statusData.status === 'FAILED' || statusData.status === 'ABORTED') {
             searchComplete = true;
             toast.dismiss('apify-search');

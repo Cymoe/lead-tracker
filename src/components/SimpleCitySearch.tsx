@@ -196,7 +196,7 @@ const ALL_CITIES = [
 ];
 
 // Remove duplicates and ensure unique cities
-const UNIQUE_CITIES = [...new Set(ALL_CITIES)];
+const UNIQUE_CITIES = Array.from(new Set(ALL_CITIES));
 
 // State abbreviations for search
 const STATE_ABBR: Record<string, string> = {
@@ -390,7 +390,6 @@ export default function SimpleCitySearch({
       
       {showDropdown && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-96 overflow-auto">
-          {console.log('Dropdown rendering - showDropdown:', showDropdown, 'displayMode:', displayMode)}
           {/* State Selection Mode */}
           {displayMode === 'states' && (
             <>

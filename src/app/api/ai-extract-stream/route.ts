@@ -211,8 +211,8 @@ export async function POST(request: NextRequest) {
 
     // Also look for the specific pattern where company name appears twice before Sponsored
     const companyPattern = /^(.+)\n\1\nSponsored/gm;
-    const patternMatches = Array.from(text.matchAll(companyPattern));
-    const detectedCompanies = patternMatches.map(match => match[1] as string);
+    const patternMatches = Array.from(text.matchAll(companyPattern)) as RegExpMatchArray[];
+    const detectedCompanies = patternMatches.map(match => match[1]);
     const companiesHint = detectedCompanies.length > 0
       ? `\n\nDetected company names that appear before "Sponsored": ${detectedCompanies.join(', ')}`
       : '';

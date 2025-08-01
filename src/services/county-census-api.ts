@@ -338,7 +338,7 @@ class CountyCensusAPI {
     console.log(`[Census API] Fetching industry distribution for county ${countyFips}`);
     
     // Remove duplicates and sort NAICS codes
-    const uniqueCodes = [...new Set(naicsCodes)].sort();
+    const uniqueCodes = Array.from(new Set(naicsCodes)).sort();
     
     // Batch requests efficiently
     const batchSize = 15; // Larger batch size for simple queries

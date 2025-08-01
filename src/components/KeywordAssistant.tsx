@@ -60,7 +60,8 @@ export default function KeywordAssistant({ city, serviceType }: KeywordAssistant
   };
 
   const handleCompleteKeyword = (index: number) => {
-    completeKeyword(index);
+    const keyword = keywordSession.keywords[index];
+    completeKeyword(keyword);
     
     // Auto-copy the next keyword
     setTimeout(() => {
@@ -241,9 +242,10 @@ export default function KeywordAssistant({ city, serviceType }: KeywordAssistant
                 </button>
                 <button
                   onClick={() => {
-                    const nextIndex = keywordSession.currentIndex + 1;
-                    if (nextIndex < keywordSession.keywords.length) {
-                      useLeadStore.getState().updateKeywordSession({ currentIndex: nextIndex });
+                    if (keywordSession.currentIndex < keywordSession.keywords.length) {
+                      const keyword = keywordSession.keywords[keywordSession.currentIndex];
+                      completeKeyword(keyword);
+                      copyNextKeyword();
                     }
                   }}
                   className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 flex items-center gap-2"

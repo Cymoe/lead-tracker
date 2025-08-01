@@ -1169,7 +1169,7 @@ export function getBusinessTypesForNAICS(naicsCode: string): string[] {
   });
   
   // Remove duplicates
-  return [...new Set(businessTypes)];
+  return Array.from(new Set(businessTypes));
 }
 
 /**

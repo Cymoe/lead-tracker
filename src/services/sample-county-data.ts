@@ -30,6 +30,7 @@ export const SAMPLE_COUNTIES: CountyMarketMetrics[] = [
     dataSource: {
       census: true,
       economic: false,
+      industryData: false,
       lastUpdated: new Date().toISOString()
     }
   },
@@ -60,6 +61,7 @@ export const SAMPLE_COUNTIES: CountyMarketMetrics[] = [
     dataSource: {
       census: true,
       economic: false,
+      industryData: false,
       lastUpdated: new Date().toISOString()
     }
   },
@@ -90,6 +92,7 @@ export const SAMPLE_COUNTIES: CountyMarketMetrics[] = [
     dataSource: {
       census: true,
       economic: false,
+      industryData: false,
       lastUpdated: new Date().toISOString()
     }
   },
@@ -122,6 +125,7 @@ export const SAMPLE_COUNTIES: CountyMarketMetrics[] = [
     dataSource: {
       census: true,
       economic: false,
+      industryData: false,
       lastUpdated: new Date().toISOString()
     }
   },
@@ -152,6 +156,7 @@ export const SAMPLE_COUNTIES: CountyMarketMetrics[] = [
     dataSource: {
       census: true,
       economic: false,
+      industryData: false,
       lastUpdated: new Date().toISOString()
     }
   },
@@ -184,6 +189,7 @@ export const SAMPLE_COUNTIES: CountyMarketMetrics[] = [
     dataSource: {
       census: true,
       economic: false,
+      industryData: false,
       lastUpdated: new Date().toISOString()
     }
   },
@@ -214,6 +220,7 @@ export const SAMPLE_COUNTIES: CountyMarketMetrics[] = [
     dataSource: {
       census: true,
       economic: false,
+      industryData: false,
       lastUpdated: new Date().toISOString()
     }
   },
@@ -244,6 +251,7 @@ export const SAMPLE_COUNTIES: CountyMarketMetrics[] = [
     dataSource: {
       census: true,
       economic: false,
+      industryData: false,
       lastUpdated: new Date().toISOString()
     }
   },
@@ -274,6 +282,7 @@ export const SAMPLE_COUNTIES: CountyMarketMetrics[] = [
     dataSource: {
       census: true,
       economic: false,
+      industryData: false,
       lastUpdated: new Date().toISOString()
     }
   },
@@ -306,6 +315,7 @@ export const SAMPLE_COUNTIES: CountyMarketMetrics[] = [
     dataSource: {
       census: true,
       economic: false,
+      industryData: false,
       lastUpdated: new Date().toISOString()
     }
   },
@@ -336,6 +346,7 @@ export const SAMPLE_COUNTIES: CountyMarketMetrics[] = [
     dataSource: {
       census: true,
       economic: false,
+      industryData: false,
       lastUpdated: new Date().toISOString()
     }
   }

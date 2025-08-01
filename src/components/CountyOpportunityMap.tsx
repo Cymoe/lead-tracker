@@ -76,7 +76,8 @@ export default function CountyOpportunityMap({ selectedIndustry, onCountySelect 
     
     // Minimum opportunity score filter
     if (currentFilter.minOpportunityScore && currentFilter.minOpportunityScore > 0) {
-      filtered = filtered.filter(c => c.opportunityScore >= currentFilter.minOpportunityScore);
+      const minScore = currentFilter.minOpportunityScore;
+      filtered = filtered.filter(c => c.opportunityScore >= minScore);
     }
     
     // Grey Tsunami tiers filter (for scoring influence)

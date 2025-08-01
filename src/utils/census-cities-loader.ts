@@ -23,8 +23,8 @@ export async function loadComprehensiveCitiesData(): Promise<USCity[]> {
   try {
     // In a real implementation, we'd fetch from a CDN or API
     // For now, we'll use the imported data
-    const response = await import('@/data/us-cities-full.json');
-    citiesCache = response.default;
+    const { US_CITIES_COMPLETE } = await import('@/data/us-cities-complete');
+    citiesCache = US_CITIES_COMPLETE;
     
     // Pre-populate state caches
     citiesCache.forEach(city => {

@@ -21,7 +21,7 @@ export async function batchUpdateLeads(updates: BatchUpdate[]): Promise<Lead[]> 
   // Execute grouped updates
   const results: Lead[] = [];
   
-  for (const group of updateGroups.values()) {
+  for (const group of Array.from(updateGroups.values())) {
     const updatedLeads = await updateLeadsAPI(group.ids, group.updates);
     results.push(...updatedLeads);
   }

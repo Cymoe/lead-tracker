@@ -60,7 +60,7 @@ export default function MarketComparisonTool({ viewMode, selectedItems, onRemove
   const renderCountyComparison = () => {
     if (comparisonData.length === 0) return null;
 
-    const metrics = [
+    const metrics: Array<{key: string, label: string, format: (v: any) => any}> = [
       { key: 'opportunityScore', label: 'Opportunity Score', format: (v: number) => v },
       { key: 'marketType', label: 'Market Type', format: (v: string) => v },
       { key: 'population', label: 'Population', format: formatNumber },
@@ -102,7 +102,7 @@ export default function MarketComparisonTool({ viewMode, selectedItems, onRemove
                 </td>
                 {comparisonData.map((item, idx) => (
                   <td key={idx} className={`px-4 py-3 whitespace-nowrap text-sm ${
-                    metric.key === 'opportunityScore' ? getScoreColor(item[metric.key]) : 'text-gray-900'
+                    metric.key === 'opportunityScore' ? getScoreColor(item[metric.key] as number) : 'text-gray-900'
                   }`}>
                     {metric.format(item[metric.key])}
                   </td>
@@ -118,7 +118,7 @@ export default function MarketComparisonTool({ viewMode, selectedItems, onRemove
   const renderMetroComparison = () => {
     if (comparisonData.length === 0) return null;
 
-    const metrics = [
+    const metrics: Array<{key: string, label: string, format: (v: any) => any}> = [
       { key: 'opportunityScore', label: 'Opportunity Score', format: (v: number) => v },
       { key: 'boomerOwners', label: 'Boomer Owners', format: formatNumber },
       { key: 'avgAge', label: 'Avg Owner Age', format: (v: number) => v },
@@ -161,7 +161,7 @@ export default function MarketComparisonTool({ viewMode, selectedItems, onRemove
                 </td>
                 {comparisonData.map((item, idx) => (
                   <td key={idx} className={`px-4 py-3 whitespace-nowrap text-sm ${
-                    metric.key === 'opportunityScore' ? getScoreColor(item[metric.key]) : 'text-gray-900'
+                    metric.key === 'opportunityScore' ? getScoreColor(item[metric.key] as number) : 'text-gray-900'
                   }`}>
                     {metric.format(item[metric.key])}
                   </td>
