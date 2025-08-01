@@ -1,7 +1,8 @@
-import { Fragment, useState } from 'react';
+import React, { Fragment, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { XMarkIcon, KeyIcon, LinkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, KeyIcon, LinkIcon, SunIcon, MoonIcon } from '@heroicons/react/24/outline';
 import { useLeadStore } from '@/lib/store';
+import { useTheme } from '@/contexts/ThemeContext';
 import toast from 'react-hot-toast';
 
 interface SettingsModalProps {
@@ -11,9 +12,18 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { googleScriptUrl, openaiApiKey, setGoogleScriptUrl, setOpenAIApiKey } = useLeadStore();
+  const { darkMode, toggleDarkMode } = useTheme();
   const [scriptUrl, setScriptUrl] = useState(googleScriptUrl);
-  const [apiKey, setApiKey] = useState(openaiApiKey ? '••••••••••••••••' : '');
+  const [apiKey, setApiKey] = useState(openaiApiKey || '');
   const [showApiKey, setShowApiKey] = useState(false);
+  
+  // Sync state when modal opens
+  React.useEffect(() => {
+    if (open) {
+      setScriptUrl(googleScriptUrl);
+      setApiKey(openaiApiKey || '');
+    }
+  }, [open, googleScriptUrl, openaiApiKey]);
 
   const handleSaveScriptUrl = () => {
     if (!scriptUrl.trim()) {
@@ -25,14 +35,16 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   };
 
   const handleSaveApiKey = () => {
-    if (apiKey && apiKey !== '••••••••••••••••' && !apiKey.startsWith('sk-')) {
+    console.log('Saving API key:', apiKey);
+    
+    if (apiKey && !apiKey.startsWith('sk-')) {
       toast.error('Invalid API key format. OpenAI keys start with "sk-"');
       return;
     }
     
-    if (apiKey === '••••••••••••••••') {
-      // No change
-      return;
+    // Directly save to localStorage too
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('openaiApiKey', apiKey);
     }
     
     setOpenAIApiKey(apiKey);
@@ -114,12 +126,9 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                             <input
                               type={showApiKey ? 'text' : 'password'}
                               value={apiKey}
-                              onChange={(e) => setApiKey(e.target.value)}
-                              onFocus={() => {
-                                if (apiKey === '••••••••••••••••') {
-                                  setApiKey('');
-                                  setShowApiKey(true);
-                                }
+                              onChange={(e) => {
+                                console.log('Input changed:', e.target.value);
+                                setApiKey(e.target.value);
                               }}
                               placeholder="sk-..."
                               className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
@@ -152,6 +161,36 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                         </div>
 
                         <div className="border-t pt-6">
+                          <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+                            {darkMode ? <MoonIcon className="h-5 w-5 mr-2" /> : <SunIcon className="h-5 w-5 mr-2" />}
+                            Appearance
+                          </label>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">
+                              {darkMode ? 'Dark mode' : 'Light mode'}
+                            </span>
+                            <button
+                              onClick={toggleDarkMode}
+                              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                                darkMode ? 'bg-blue-600' : 'bg-gray-200'
+                              }`}
+                              role="switch"
+                              aria-checked={darkMode}
+                            >
+                              <span
+                                aria-hidden="true"
+                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                  darkMode ? 'translate-x-5' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <p className="mt-2 text-xs text-gray-500">
+                            Toggle between light and dark themes
+                          </p>
+                        </div>
+
+                        <div className="border-t pt-6">
                           <h4 className="text-sm font-medium text-gray-700 mb-2">About</h4>
                           <p className="text-sm text-gray-600">
                             Lead Tracker Pro v2.0 - Built with React/Next.js
@@ -165,7 +204,18 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                   </div>
                 </div>
 
-                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+                  <button
+                    type="button"
+                    className="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 sm:ml-3 sm:w-auto"
+                    onClick={() => {
+                      handleSaveScriptUrl();
+                      handleSaveApiKey();
+                      onClose();
+                    }}
+                  >
+                    Save All Settings
+                  </button>
                   <button
                     type="button"
                     className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"

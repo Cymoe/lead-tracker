@@ -63,25 +63,64 @@ export function exportToGoogleSheets(leads: Lead[]): boolean {
 }
 
 export function exportToCSV(leads: Lead[]) {
+  // Define headers
   const headers = [
-    'Handle', 'Company Name', 'Service Type', 'City', 'Phone', 
-    'Instagram URL', 'Website', 'Lead Source', 'Running Ads', 
-    'Ad Start Date', 'Score', 'Notes'
+    'Company Name',
+    'Instagram Handle',
+    'Service Type',
+    'City',
+    'State',
+    'Phone',
+    'Email',
+    'Email 2',
+    'Email 3',
+    'Website',
+    'Instagram URL',
+    'Facebook URL',
+    'LinkedIn URL',
+    'Twitter URL',
+    'Google Maps URL',
+    'Address',
+    'Full Address',
+    'Search Query',
+    'Rating',
+    'Review Count',
+    'Lead Source',
+    'Running Ads',
+    'Ad Copy',
+    'Score',
+    'Notes',
+    'Created Date'
   ];
-  
+
+  // Convert leads to CSV rows
   const rows = leads.map(lead => [
-    lead.handle,
-    lead.company_name,
-    lead.service_type,
-    lead.city,
-    lead.phone,
-    lead.instagram_url,
-    lead.website,
-    lead.lead_source,
+    lead.company_name || '',
+    lead.handle || '',
+    lead.service_type || '',
+    lead.city || '',
+    lead.state || '',
+    lead.phone || '',
+    lead.email || '',
+    lead.email2 || '',
+    lead.email3 || '',
+    lead.website || '',
+    lead.instagram_url || '',
+    lead.facebook_url || '',
+    lead.linkedin_url || '',
+    lead.twitter_url || '',
+    lead.google_maps_url || '',
+    lead.address || '',
+    lead.full_address || '',
+    lead.search_query || '',
+    lead.rating || '',
+    lead.review_count || '',
+    lead.lead_source || '',
     lead.running_ads ? 'Yes' : 'No',
-    lead.ad_start_date,
-    lead.score,
-    lead.notes
+    lead.ad_copy || '',
+    lead.score || '',
+    lead.notes || '',
+    new Date(lead.created_at).toLocaleDateString()
   ]);
   
   const csv = [headers, ...rows]

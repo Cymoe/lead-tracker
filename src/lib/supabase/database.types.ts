@@ -6,7 +6,12 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export interface Database {
+export type Database = {
+  // Allows to automatically instanciate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "12.2.12 (cd3cf9e)"
+  }
   public: {
     Tables: {
       profiles: {
@@ -46,9 +51,22 @@ export interface Database {
           company_name: string
           service_type: string | null
           city: string | null
+          state: string | null
           phone: string | null
+          email: string | null
+          email2: string | null
+          email3: string | null
           instagram_url: string | null
+          facebook_url: string | null
+          linkedin_url: string | null
+          twitter_url: string | null
           website: string | null
+          google_maps_url: string | null
+          address: string | null
+          full_address: string | null
+          search_query: string | null
+          rating: number | null
+          review_count: number | null
           lead_source: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | null
           running_ads: boolean
           ad_start_date: string | null
@@ -75,9 +93,22 @@ export interface Database {
           company_name: string
           service_type?: string | null
           city?: string | null
+          state?: string | null
           phone?: string | null
+          email?: string | null
+          email2?: string | null
+          email3?: string | null
           instagram_url?: string | null
+          facebook_url?: string | null
+          linkedin_url?: string | null
+          twitter_url?: string | null
           website?: string | null
+          google_maps_url?: string | null
+          address?: string | null
+          full_address?: string | null
+          search_query?: string | null
+          rating?: number | null
+          review_count?: number | null
           lead_source?: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | null
           running_ads?: boolean
           ad_start_date?: string | null
@@ -104,9 +135,22 @@ export interface Database {
           company_name?: string
           service_type?: string | null
           city?: string | null
+          state?: string | null
           phone?: string | null
+          email?: string | null
+          email2?: string | null
+          email3?: string | null
           instagram_url?: string | null
+          facebook_url?: string | null
+          linkedin_url?: string | null
+          twitter_url?: string | null
           website?: string | null
+          google_maps_url?: string | null
+          address?: string | null
+          full_address?: string | null
+          search_query?: string | null
+          rating?: number | null
+          review_count?: number | null
           lead_source?: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | null
           running_ads?: boolean
           ad_start_date?: string | null
@@ -206,6 +250,44 @@ export interface Database {
           user_id?: string
           role?: 'owner' | 'admin' | 'member'
           joined_at?: string
+        }
+      }
+      apify_search_results: {
+        Row: {
+          id: string
+          user_id: string
+          search_type: 'google_maps' | 'facebook_ads'
+          search_params: Json
+          results: Json
+          result_count: number
+          search_mode: string | null
+          cost_estimate: Json | null
+          created_at: string
+          expires_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          search_type: 'google_maps' | 'facebook_ads'
+          search_params: Json
+          results: Json
+          result_count: number
+          search_mode?: string | null
+          cost_estimate?: Json | null
+          created_at?: string
+          expires_at: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          search_type?: 'google_maps' | 'facebook_ads'
+          search_params?: Json
+          results?: Json
+          result_count?: number
+          search_mode?: string | null
+          cost_estimate?: Json | null
+          created_at?: string
+          expires_at?: string
         }
       }
     }

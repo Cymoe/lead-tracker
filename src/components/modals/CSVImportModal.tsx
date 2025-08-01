@@ -142,11 +142,19 @@ export default function CSVImportModal({ open, onClose }: CSVImportModalProps) {
       setStep('complete');
       
       if (successCount > 0) {
-        toast.success(`Imported ${successCount} lead${successCount !== 1 ? 's' : ''}`);
+        toast.success(`Successfully imported ${successCount} lead${successCount !== 1 ? 's' : ''}!`);
       }
       
       if (errorCount > 0) {
         toast.error(`Failed to import ${errorCount} lead${errorCount !== 1 ? 's' : ''}`);
+      }
+      
+      // Close modal after a short delay if successful
+      if (successCount > 0) {
+        setTimeout(() => {
+          onClose();
+          resetImport();
+        }, 2000);
       }
     } catch (error) {
       toast.error('Import failed');
@@ -170,9 +178,20 @@ export default function CSVImportModal({ open, onClose }: CSVImportModalProps) {
     { value: 'company_name', label: 'Company Name' },
     { value: 'handle', label: 'Instagram Handle' },
     { value: 'phone', label: 'Phone' },
+    { value: 'email', label: 'Email' },
+    { value: 'email2', label: 'Email 2' },
+    { value: 'email3', label: 'Email 3' },
     { value: 'website', label: 'Website' },
+    { value: 'instagram_url', label: 'Instagram URL' },
+    { value: 'facebook_url', label: 'Facebook URL' },
+    { value: 'linkedin_url', label: 'LinkedIn URL' },
+    { value: 'twitter_url', label: 'Twitter URL' },
     { value: 'city', label: 'City' },
+    { value: 'state', label: 'State' },
+    { value: 'address', label: 'Address' },
+    { value: 'full_address', label: 'Full Address' },
     { value: 'service_type', label: 'Service Type' },
+    { value: 'search_query', label: 'Search Query' },
     { value: 'notes', label: 'Notes' },
     { value: 'ad_copy', label: 'Ad Copy' },
     { value: 'price_info', label: 'Price Info' },
@@ -193,7 +212,7 @@ export default function CSVImportModal({ open, onClose }: CSVImportModalProps) {
           <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
         </Transition.Child>
 
-        <div className="fixed inset-0 z-10 overflow-y-auto">
+        <div className="fixed inset-0 z-[51] overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
             <Transition.Child
               as={Fragment}
@@ -392,27 +411,58 @@ export default function CSVImportModal({ open, onClose }: CSVImportModalProps) {
                               <thead className="bg-gray-50 sticky top-0">
                                 <tr>
                                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
-                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">City</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
                                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Service</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Social</th>
                                 </tr>
                               </thead>
                               <tbody className="bg-white divide-y divide-gray-200">
-                                {validLeads.slice(0, 10).map((lead, index) => (
+                                {validLeads.map((lead, index) => (
                                   <tr key={index}>
-                                    <td className="px-4 py-2 text-sm text-gray-900">{lead.company_name}</td>
-                                    <td className="px-4 py-2 text-sm text-gray-500">{lead.phone || '-'}</td>
-                                    <td className="px-4 py-2 text-sm text-gray-500">{lead.city || '-'}</td>
-                                    <td className="px-4 py-2 text-sm text-gray-500">{lead.service_type || '-'}</td>
-                                  </tr>
-                                ))}
-                                {validLeads.length > 10 && (
-                                  <tr>
-                                    <td colSpan={4} className="px-4 py-2 text-sm text-gray-500 text-center">
-                                      ... and {validLeads.length - 10} more
+                                    <td className="px-4 py-2 text-sm">
+                                      <div>
+                                        <div className="font-medium text-gray-900">{lead.company_name}</div>
+                                        {lead.website && (
+                                          <div className="text-gray-500 text-xs truncate">{lead.website}</div>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-2 text-sm">
+                                      <div>
+                                        {lead.phone && <div className="text-gray-900">{lead.phone}</div>}
+                                        {lead.email && <div className="text-gray-500 text-xs">{lead.email}</div>}
+                                        {(lead.email2 || lead.email3) && (
+                                          <div className="text-gray-400 text-xs">
+                                            +{[lead.email2, lead.email3].filter(Boolean).length} more
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-2 text-sm text-gray-900">
+                                      {[lead.city, lead.state].filter(Boolean).join(', ') || 
+                                       lead.full_address || 
+                                       'N/A'}
+                                    </td>
+                                    <td className="px-4 py-2 text-sm text-gray-900">{lead.service_type || 'N/A'}</td>
+                                    <td className="px-4 py-2 text-sm">
+                                      <div className="flex gap-1">
+                                        {lead.instagram_url && (
+                                          <span className="text-pink-600" title="Instagram">📷</span>
+                                        )}
+                                        {lead.facebook_url && (
+                                          <span className="text-blue-600" title="Facebook">f</span>
+                                        )}
+                                        {lead.linkedin_url && (
+                                          <span className="text-blue-700" title="LinkedIn">in</span>
+                                        )}
+                                        {lead.twitter_url && (
+                                          <span className="text-blue-400" title="Twitter">𝕏</span>
+                                        )}
+                                      </div>
                                     </td>
                                   </tr>
-                                )}
+                                ))}
                               </tbody>
                             </table>
                           </div>

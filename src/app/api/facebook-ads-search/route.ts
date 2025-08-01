@@ -68,8 +68,10 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // Build the Facebook Ad Library URL
-    const searchUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&q=${encodeURIComponent(keyword)}&search_type=keyword_unordered&media_type=all`;
+    // Build the Facebook Ad Library URL with better parameters
+    // Adding location to the search query for better results
+    const searchQuery = `${keyword} ${location}`.trim();
+    const searchUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&q=${encodeURIComponent(searchQuery)}&search_type=keyword_unordered&media_type=all`;
     
     // Use ScrapingBee with JavaScript rendering
     const response = await fetch(`https://app.scrapingbee.com/api/v1/?` + new URLSearchParams({
@@ -151,90 +153,95 @@ function parseFacebookAds(html: string, location: string, limit: number): Facebo
   const results: FacebookAdResult[] = [];
   
   console.log('Starting to parse Facebook ads from HTML...');
+  console.log('HTML sample:', html.substring(0, 500));
   
-  // First, check if we're on the Ad Library page
-  if (html.includes('Ad Library') || html.includes('Ads about social issues')) {
-    console.log('Confirmed: Facebook Ad Library page detected');
+  // Check if we're on the Ad Library page
+  if (!html.includes('Ad Library') && !html.includes('ads/library')) {
+    console.log('Warning: This might not be the Facebook Ad Library page');
+    // For now, let's return empty results instead of wrong data
+    return [];
   }
   
-  // Try multiple parsing strategies
-  
-  // Strategy 1: Look for advertiser names with common patterns
-  const advertiserPatterns = [
-    /data-testid="[^"]*"[^>]*>([^<]+(?:LLC|Inc|Corp|Co\.|Company|Services?|Plumbing|HVAC|Landscaping|Roofing|Electrical|Painting|Construction|Contractors?|Repair|Maintenance)[^<]*)</gi,
-    /<a[^>]*href="[^"]*facebook\.com[^"]*"[^>]*>([^<]+)<\/a>/gi,
-    /<span[^>]*>([A-Z][^<]+(?:LLC|Inc|Corp|Services?|Plumbing|HVAC|Landscaping|Roofing)[^<]*)<\/span>/gi
-  ];
+  // Facebook's HTML is heavily obfuscated, so let's be more careful
+  // Look for patterns that are more likely to be actual advertiser names
   
   const foundNames = new Set<string>();
   
-  for (const pattern of advertiserPatterns) {
+  // Pattern 1: Look for text that appears to be business names with common suffixes
+  const businessPatterns = [
+    // Company names ending with business identifiers
+    /([A-Z][A-Za-z0-9\s&'-]+(?:LLC|Inc|Corp|Co\.|Company|Services|Service|Group|Solutions|Enterprises|Partners))/g,
+    // Service-specific businesses
+    /([A-Z][A-Za-z0-9\s&'-]+\s+(?:Plumbing|HVAC|Landscaping|Roofing|Electrical|Painting|Construction|Remodeling|Concrete|Pool|Pest Control|Tree Service|Lawn Care|Cleaning))/g,
+    // Businesses with "and" patterns
+    /([A-Z][A-Za-z0-9\s]+\s+(?:and|&)\s+[A-Z][A-Za-z0-9\s]+\s+(?:LLC|Inc|Services?))/g
+  ];
+  
+  // Extract potential business names
+  for (const pattern of businessPatterns) {
     const matches = Array.from(html.matchAll(pattern));
     for (const match of matches) {
       const name = match[1].trim();
-      // Filter out UI elements and common false positives
-      if (name.length > 3 && 
-          !name.includes('Facebook') && 
-          !name.includes('Meta') && 
-          !name.includes('Ad Library') &&
-          !name.includes('See more') &&
-          !name.includes('Filter') &&
-          !name.includes('Search') &&
-          !name.includes('Loading') &&
+      
+      // Additional filtering
+      if (name.length > 5 && 
+          name.length < 100 && // Avoid long strings
+          !name.includes('http') && // No URLs
+          !name.includes('www.') &&
+          !name.includes('.com') &&
+          !name.includes('Facebook') &&
+          !name.includes('Meta') &&
+          !name.includes('marketplace') &&
+          !name.includes('zillow') &&
           !name.includes('Privacy') &&
           !name.includes('Terms') &&
-          !name.includes('Settings')) {
+          !name.includes('Cookie') &&
+          !name.match(/^\d+$/) && // Not just numbers
+          name.split(' ').length <= 8) { // Reasonable name length
+        
         foundNames.add(name);
       }
     }
   }
   
-  console.log(`Found ${foundNames.size} potential advertisers`);
+  console.log(`Found ${foundNames.size} potential business names`);
   
-  // Convert found names to results
-  let index = 0;
+  // Since Facebook Ad Library is hard to parse, let's inform the user
+  if (foundNames.size === 0) {
+    console.log('No advertisers found - Facebook may have changed their page structure');
+    // Return a message to the user
+    results.push({
+      id: 'fb_parse_error',
+      page_name: 'Unable to parse Facebook Ad Library',
+      ad_creative_body: 'Facebook may have updated their page structure. Try using the manual import option instead, or search directly on Facebook Ad Library and copy the business names.',
+      targeting: { location: [location] }
+    });
+    return results;
+  }
+  
+  // Convert to results
   const namesArray = Array.from(foundNames);
-  for (const name of namesArray) {
-    if (index >= limit) break;
+  const locationCity = location.split(',')[0].trim().toLowerCase();
+  
+  for (let i = 0; i < Math.min(namesArray.length, limit); i++) {
+    const name = namesArray[i];
+    
+    // Try to detect service type from the name
+    const serviceType = detectServiceType(name, '');
     
     results.push({
-      id: `fb_${Date.now()}_${index}`,
+      id: `fb_${Date.now()}_${i}`,
       page_name: name,
-      ad_creative_body: '', // We'll try to extract this in a future update
+      ad_creative_body: '',
       call_to_action: '',
       started_running: '',
       targeting: {
         location: [location]
       }
     });
-    index++;
   }
   
-  // If we didn't find enough results, try a simpler approach
-  if (results.length < 5) {
-    console.log('Trying fallback parsing strategy...');
-    
-    // Look for any business-like names
-    const simplePattern = /([A-Z][a-zA-Z\s&'-]+)\s+(Services?|LLC|Inc|Corp|Co\.|Company|Plumbing|HVAC|AC|Air|Landscaping|Lawn|Roofing|Roof|Electrical|Electric|Painting|Paint|Construction|Contractor|Repair|Maintenance)/g;
-    const simpleMatches = Array.from(html.matchAll(simplePattern));
-    
-    for (const match of simpleMatches) {
-      if (results.length >= limit) break;
-      
-      const fullName = match[0].trim();
-      if (!foundNames.has(fullName)) {
-        results.push({
-          id: `fb_${Date.now()}_${results.length}`,
-          page_name: fullName,
-          targeting: {
-            location: [location]
-          }
-        });
-      }
-    }
-  }
-  
-  console.log(`Final result count: ${results.length}`);
+  console.log(`Returning ${results.length} results`);
   return results;
 }
 

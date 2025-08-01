@@ -9,6 +9,7 @@ import KeywordAssistant from '../KeywordAssistant';
 import USCityAutocomplete from '../USCityAutocomplete';
 import ServiceTypeDropdown from '../ServiceTypeDropdown';
 import { extractWithAI, extractWithAIStream } from '@/lib/api';
+import { detectDataFormat } from '@/utils/data-format-detector';
 
 interface BulkImportModalProps {
   open: boolean;
@@ -26,6 +27,9 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
   const streamingMode = true; // Always use streaming for better UX
   const [processedCount, setProcessedCount] = useState(0);
   const [selectedServiceType, setSelectedServiceType] = useState('');
+  const [duplicateLeads, setDuplicateLeads] = useState<Lead[]>([]);
+  const [importMode, setImportMode] = useState<'new' | 'update' | 'all'>('new');
+
 
   const handleAIExtract = async () => {
     if (!bulkData.trim()) {
@@ -33,17 +37,44 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
       return;
     }
 
+    console.log('Starting AI extraction...');
+    console.log('Data length:', bulkData.length);
+    console.log('First 200 chars:', bulkData.substring(0, 200));
+
     setIsProcessing(true);
     setPreview([]);
     setShowPreview(true);
     setProcessedCount(0);
     
     try {
-      const serviceType = keywordSession.active ? getCurrentServiceType() : null;
+      // Detect data format
+      const formatResult = detectDataFormat(bulkData);
+      console.log('Detected format:', formatResult);
+      
+      // Show appropriate toast based on format
+      if (formatResult.format === 'facebook-ad-library' && formatResult.confidence >= 70) {
+        toast('Detected Facebook Ad Library format. Using AI with structured outputs...', { icon: '🎯' });
+        const sponsoredCount = formatResult.metadata?.sponsoredCount || 0;
+        if (sponsoredCount > 0) {
+          toast(`Found ${sponsoredCount} ads to extract...`, { icon: '📊' });
+        }
+      } else {
+        toast(`Using AI extraction for ${formatResult.format} data...`, { icon: '🤖' });
+      }
       
       if (streamingMode) {
         // Streaming mode - show leads as they come in
-        const collectedLeads: Lead[] = [];
+        const collectedNewLeads: Lead[] = [];
+        const collectedDuplicates: Lead[] = [];
+        
+        console.log('Starting streaming extraction...');
+        console.log('OpenAI API Key available:', !!openaiApiKey);
+        
+        if (!openaiApiKey) {
+          toast.error('OpenAI API key is required. Please set it in Settings.');
+          setIsProcessing(false);
+          return;
+        }
         
         await extractWithAIStream(
           bulkData,
@@ -51,40 +82,59 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
           selectedServiceType,
           openaiApiKey,
           (lead: Lead) => {
-            // Filter duplicate as it arrives
-            const isDuplicate = leads.some(
-              existing => 
-                existing.company_name.toLowerCase() === lead.company_name.toLowerCase() ||
-                (existing.handle && lead.handle && existing.handle.toLowerCase() === lead.handle.toLowerCase())
-            ) || collectedLeads.some(
+            console.log('Received lead:', lead.company_name);
+            
+            // Check if duplicate
+            const existingLead = leads.find(
               existing => 
                 existing.company_name.toLowerCase() === lead.company_name.toLowerCase() ||
                 (existing.handle && lead.handle && existing.handle.toLowerCase() === lead.handle.toLowerCase())
             );
             
-            if (!isDuplicate) {
-              collectedLeads.push(lead);
-              setPreview(prev => [...prev, lead]);
-              setProcessedCount(prev => prev + 1);
+            if (existingLead) {
+              // It's a duplicate - add to duplicates list with reference to existing
+              const duplicateWithRef = { ...lead, existingId: existingLead.id };
+              collectedDuplicates.push(duplicateWithRef);
+              setDuplicateLeads(prev => [...prev, duplicateWithRef]);
+            } else {
+              // Check if it's duplicate within current extraction
+              const isDuplicateInBatch = collectedNewLeads.some(
+                existing => 
+                  existing.company_name.toLowerCase() === lead.company_name.toLowerCase() ||
+                  (existing.handle && lead.handle && existing.handle.toLowerCase() === lead.handle.toLowerCase())
+              );
+              
+              if (!isDuplicateInBatch) {
+                collectedNewLeads.push(lead);
+                setPreview(prev => [...prev, lead]);
+              }
             }
+            
+            setProcessedCount(prev => prev + 1);
           },
           (error) => {
             console.error('Streaming error:', error);
-            toast.error('Error during AI extraction');
+            toast.error(`Error during AI extraction: ${error}`);
+            setIsProcessing(false);
           }
         );
         
-        if (collectedLeads.length === 0) {
+        const totalFound = collectedNewLeads.length + collectedDuplicates.length;
+        
+        if (totalFound === 0) {
           toast.error('No leads found in the provided text');
+          setIsProcessing(false);
           return;
         }
         
-        toast.success(`Found ${processedCount} new leads`);
+        toast.success(`Found ${totalFound} leads (${collectedNewLeads.length} new, ${collectedDuplicates.length} duplicates)`);
         
         // Add to session if active
-        if (keywordSession.active) {
-          useLeadStore.getState().addSessionResults(collectedLeads);
+        if (keywordSession.active && importMode === 'new') {
+          useLeadStore.getState().addSessionResults(collectedNewLeads);
         }
+        
+        setIsProcessing(false);
       } else {
         // Non-streaming mode - wait for all leads
         const extractedLeads = await extractWithAI(
@@ -109,6 +159,7 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
         );
 
         setPreview(newLeads);
+        
         toast.success(`Found ${extractedLeads.length} leads (${newLeads.length} new)`);
 
         // Add to session if active
@@ -117,8 +168,8 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
         }
       }
     } catch (error) {
-      toast.error('AI extraction failed');
-      console.error(error);
+      console.error('AI extraction error:', error);
+      toast.error(`AI extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsProcessing(false);
     }
@@ -157,41 +208,83 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
   };
 
   const handleImport = async () => {
-    if (preview.length === 0) return;
+    if (preview.length === 0 && duplicateLeads.length === 0) return;
 
     setIsProcessing(true);
     
-    // Save all leads in parallel (in batches to avoid overwhelming the server)
-    const BATCH_SIZE = 10; // Process 10 leads at a time
-    let successCount = 0;
+    let leadsToProcess: Lead[] = [];
+    let updateMode = false;
     
-    for (let i = 0; i < preview.length; i += BATCH_SIZE) {
-      const batch = preview.slice(i, i + BATCH_SIZE);
+    // Determine which leads to process based on import mode
+    switch (importMode) {
+      case 'new':
+        leadsToProcess = preview;
+        break;
+      case 'update':
+        leadsToProcess = duplicateLeads;
+        updateMode = true;
+        break;
+      case 'all':
+        leadsToProcess = [...preview, ...duplicateLeads];
+        break;
+    }
+    
+    if (leadsToProcess.length === 0) {
+      toast.error('No leads to import in this mode');
+      setIsProcessing(false);
+      return;
+    }
+    
+    // Save all leads in parallel (in batches to avoid overwhelming the server)
+    const BATCH_SIZE = 10;
+    let successCount = 0;
+    let updateCount = 0;
+    
+    for (let i = 0; i < leadsToProcess.length; i += BATCH_SIZE) {
+      const batch = leadsToProcess.slice(i, i + BATCH_SIZE);
       
-      const savePromises = batch.map(lead => 
-        saveLead(lead)
-          .then(savedLead => {
+      const savePromises = batch.map(async (lead) => {
+        try {
+          if (updateMode && lead.existingId) {
+            // Update existing lead with new data
+            const { updateLead } = await import('@/lib/api');
+            const updatedLead = await updateLead(lead.existingId, {
+              ...lead,
+              notes: lead.notes ? `${lead.notes}\n\n[Updated from FB Ad Library]` : '[Updated from FB Ad Library]'
+            });
+            useLeadStore.getState().updateLead(updatedLead);
+            updateCount++;
+            return true;
+          } else {
+            // Save as new lead
+            const savedLead = await saveLead(lead);
             addLead(savedLead);
             return true;
-          })
-          .catch(error => {
-            console.error('Failed to import lead:', error);
-            return false;
-          })
-      );
+          }
+        } catch (error) {
+          console.error('Failed to import/update lead:', error);
+          return false;
+        }
+      });
       
       const results = await Promise.all(savePromises);
       successCount += results.filter(success => success).length;
       
       // Show progress for large imports
-      if (preview.length > 20 && i + BATCH_SIZE < preview.length) {
-        const progress = Math.min(i + BATCH_SIZE, preview.length);
-        toast.loading(`Importing... ${progress}/${preview.length}`, { id: 'import-progress' });
+      if (leadsToProcess.length > 20 && i + BATCH_SIZE < leadsToProcess.length) {
+        const progress = Math.min(i + BATCH_SIZE, leadsToProcess.length);
+        toast.loading(`Processing... ${progress}/${leadsToProcess.length}`, { id: 'import-progress' });
       }
     }
     
     toast.dismiss('import-progress');
-    toast.success(`Imported ${successCount} leads successfully!`);
+    
+    if (updateMode) {
+      toast.success(`Updated ${updateCount} leads successfully!`);
+    } else {
+      toast.success(`Imported ${successCount} leads successfully!`);
+    }
+    
     onClose();
     resetModal();
   };
@@ -200,14 +293,12 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
     setBulkData('');
     setBulkCity('');
     setPreview([]);
+    setDuplicateLeads([]);
     setShowPreview(false);
     setProcessedCount(0);
+    setImportMode('new');
   };
 
-  const getCurrentServiceType = () => {
-    // Use the selected service type from the form
-    return selectedServiceType || null;
-  };
 
   const detectServiceType = (name: string): string => {
     const lower = name.toLowerCase();
@@ -243,7 +334,7 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
           <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
         </Transition.Child>
 
-        <div className="fixed inset-0 z-10 overflow-y-auto">
+        <div className="fixed inset-0 z-[51] overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
             <Transition.Child
               as={Fragment}
@@ -347,25 +438,91 @@ AZ Painters, Scottsdale, Painting"
                           <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                             <h4 className="font-medium text-gray-900 mb-2">
                               {isProcessing && streamingMode ? (
-                                <span>
-                                  🔄 Processing... Found {preview.length} leads so far
+                                <span className="flex items-center gap-2">
+                                  <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  Processing with AI... Found {processedCount} leads so far
                                 </span>
                               ) : (
                                 <span>
-                                  Preview (found {preview.length} leads):
+                                  Preview (found {preview.length + duplicateLeads.length} total - {preview.length} new, {duplicateLeads.length} duplicates):
                                 </span>
                               )}
                             </h4>
+                            
+                            {/* Import mode selector */}
+                            {!isProcessing && (preview.length > 0 || duplicateLeads.length > 0) && (
+                              <div className="mb-3 flex gap-2">
+                                <button
+                                  onClick={() => setImportMode('new')}
+                                  className={`px-3 py-1 text-xs rounded ${
+                                    importMode === 'new' 
+                                      ? 'bg-blue-600 text-white' 
+                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                  }`}
+                                >
+                                  Import New Only ({preview.length})
+                                </button>
+                                {duplicateLeads.length > 0 && (
+                                  <>
+                                    <button
+                                      onClick={() => setImportMode('update')}
+                                      className={`px-3 py-1 text-xs rounded ${
+                                        importMode === 'update' 
+                                          ? 'bg-blue-600 text-white' 
+                                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                      }`}
+                                    >
+                                      Update Existing ({duplicateLeads.length})
+                                    </button>
+                                    <button
+                                      onClick={() => setImportMode('all')}
+                                      className={`px-3 py-1 text-xs rounded ${
+                                        importMode === 'all' 
+                                          ? 'bg-blue-600 text-white' 
+                                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                      }`}
+                                    >
+                                      Import All ({preview.length + duplicateLeads.length})
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            
                             <div className="max-h-48 overflow-y-auto space-y-2">
+                              {/* Show new leads */}
                               {preview.map((lead, idx) => (
-                                <div key={idx} className="text-sm animate-fade-in animate-slide-in">
+                                <div key={`new-${idx}`} className="text-sm animate-fade-in animate-slide-in">
                                   ✅ {lead.company_name} - {lead.city} ({lead.service_type})
                                   {lead.phone && ` - 📞 ${lead.phone}`}
+                                  <span className="ml-2 text-xs text-green-600 font-medium">[NEW]</span>
                                 </div>
                               ))}
-                              {isProcessing && streamingMode && preview.length === 0 && (
-                                <div className="text-sm text-gray-500 italic">
-                                  Waiting for AI to start processing...
+                              
+                              {/* Show duplicate leads */}
+                              {duplicateLeads.map((lead, idx) => (
+                                <div key={`dup-${idx}`} className="text-sm animate-fade-in animate-slide-in opacity-75">
+                                  🔄 {lead.company_name} - {lead.city} ({lead.service_type})
+                                  {lead.phone && ` - 📞 ${lead.phone}`}
+                                  <span className="ml-2 text-xs text-orange-600 font-medium">[DUPLICATE - Already exists]</span>
+                                </div>
+                              ))}
+                              
+                              {isProcessing && streamingMode && processedCount === 0 && (
+                                <div className="flex flex-col items-center justify-center py-8">
+                                  <svg className="animate-spin h-8 w-8 text-blue-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  <div className="text-sm text-gray-600 font-medium">
+                                    AI is analyzing your data...
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    This may take a moment for large datasets
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -392,9 +549,19 @@ AZ Painters, Scottsdale, Painting"
                     type="button"
                     onClick={handleAIExtract}
                     disabled={isProcessing}
-                    className="inline-flex w-full justify-center rounded-md bg-yellow-500 px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm hover:bg-yellow-400 sm:ml-3 sm:w-auto disabled:opacity-50"
+                    className="inline-flex w-full justify-center rounded-md bg-yellow-500 px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm hover:bg-yellow-400 sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    🤖 AI Extract
+                    {isProcessing ? (
+                      <span className="flex items-center gap-2">
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Processing...
+                      </span>
+                    ) : (
+                      '🤖 AI Extract'
+                    )}
                   </button>
                   
                   <button

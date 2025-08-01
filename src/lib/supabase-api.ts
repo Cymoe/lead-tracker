@@ -6,7 +6,7 @@ type DbLead = Database['public']['Tables']['leads']['Row'];
 type DbLeadInsert = Database['public']['Tables']['leads']['Insert'];
 type DbLeadUpdate = Database['public']['Tables']['leads']['Update'];
 
-// Convert database lead to app lead format
+// Convert database lead to app format
 function dbToAppLead(dbLead: DbLead): Lead {
   return {
     id: dbLead.id,
@@ -15,9 +15,22 @@ function dbToAppLead(dbLead: DbLead): Lead {
     company_name: dbLead.company_name,
     service_type: dbLead.service_type,
     city: dbLead.city,
+    state: dbLead.state,
     phone: dbLead.phone,
+    email: dbLead.email,
+    email2: dbLead.email2,
+    email3: dbLead.email3,
     instagram_url: dbLead.instagram_url,
+    facebook_url: dbLead.facebook_url,
+    linkedin_url: dbLead.linkedin_url,
+    twitter_url: dbLead.twitter_url,
     website: dbLead.website,
+    google_maps_url: dbLead.google_maps_url,
+    address: dbLead.address,
+    full_address: dbLead.full_address,
+    search_query: dbLead.search_query,
+    rating: dbLead.rating,
+    review_count: dbLead.review_count,
     lead_source: dbLead.lead_source,
     running_ads: dbLead.running_ads,
     ad_start_date: dbLead.ad_start_date,
@@ -47,10 +60,23 @@ function appToDbLead(lead: Partial<Lead>, userId: string): DbLeadInsert {
     company_name: lead.company_name!,
     service_type: lead.service_type || null,
     city: lead.city || null,
+    state: lead.state || null,
     phone: lead.phone || null,
+    email: lead.email || null,
+    email2: lead.email2 || null,
+    email3: lead.email3 || null,
     instagram_url: lead.instagram_url || null,
+    facebook_url: lead.facebook_url || null,
+    linkedin_url: lead.linkedin_url || null,
+    twitter_url: lead.twitter_url || null,
     website: lead.website || null,
-    lead_source: lead.lead_source || null,
+    google_maps_url: lead.google_maps_url || null,
+    address: lead.address || null,
+    full_address: lead.full_address || null,
+    search_query: lead.search_query || null,
+    rating: lead.rating || null,
+    review_count: lead.review_count || null,
+    lead_source: lead.lead_source || 'Instagram Manual', // Default to Instagram Manual instead of null
     running_ads: lead.running_ads ?? false,
     ad_start_date: lead.ad_start_date || null,
     ad_copy: lead.ad_copy || null,
@@ -120,9 +146,15 @@ export async function updateLead(id: string, updates: Partial<Lead>): Promise<Le
   if (updates.company_name !== undefined) dbUpdate.company_name = updates.company_name;
   if (updates.service_type !== undefined) dbUpdate.service_type = updates.service_type;
   if (updates.city !== undefined) dbUpdate.city = updates.city;
+  if (updates.state !== undefined) dbUpdate.state = updates.state;
   if (updates.phone !== undefined) dbUpdate.phone = updates.phone;
+  if (updates.email !== undefined) dbUpdate.email = updates.email;
   if (updates.instagram_url !== undefined) dbUpdate.instagram_url = updates.instagram_url;
   if (updates.website !== undefined) dbUpdate.website = updates.website;
+  if (updates.google_maps_url !== undefined) dbUpdate.google_maps_url = updates.google_maps_url;
+  if (updates.address !== undefined) dbUpdate.address = updates.address;
+  if (updates.rating !== undefined) dbUpdate.rating = updates.rating;
+  if (updates.review_count !== undefined) dbUpdate.review_count = updates.review_count;
   if (updates.lead_source !== undefined) dbUpdate.lead_source = updates.lead_source;
   if (updates.running_ads !== undefined) dbUpdate.running_ads = updates.running_ads;
   if (updates.ad_start_date !== undefined) dbUpdate.ad_start_date = updates.ad_start_date;
@@ -196,9 +228,15 @@ export async function updateLeads(ids: string[], updates: Partial<Lead>): Promis
   if (updates.company_name !== undefined) dbUpdate.company_name = updates.company_name;
   if (updates.service_type !== undefined) dbUpdate.service_type = updates.service_type;
   if (updates.city !== undefined) dbUpdate.city = updates.city;
+  if (updates.state !== undefined) dbUpdate.state = updates.state;
   if (updates.phone !== undefined) dbUpdate.phone = updates.phone;
+  if (updates.email !== undefined) dbUpdate.email = updates.email;
   if (updates.instagram_url !== undefined) dbUpdate.instagram_url = updates.instagram_url;
   if (updates.website !== undefined) dbUpdate.website = updates.website;
+  if (updates.google_maps_url !== undefined) dbUpdate.google_maps_url = updates.google_maps_url;
+  if (updates.address !== undefined) dbUpdate.address = updates.address;
+  if (updates.rating !== undefined) dbUpdate.rating = updates.rating;
+  if (updates.review_count !== undefined) dbUpdate.review_count = updates.review_count;
   if (updates.lead_source !== undefined) dbUpdate.lead_source = updates.lead_source;
   if (updates.running_ads !== undefined) dbUpdate.running_ads = updates.running_ads;
   if (updates.ad_start_date !== undefined) dbUpdate.ad_start_date = updates.ad_start_date;
@@ -269,6 +307,8 @@ export async function extractWithAIStream(
   onLeadReceived: (lead: Lead) => void,
   onError?: (error: string) => void
 ): Promise<void> {
+  console.log('extractWithAIStream called, making API request...');
+  
   const response = await fetch('/api/ai-extract-stream', {
     method: 'POST',
     headers: {
@@ -281,9 +321,20 @@ export async function extractWithAIStream(
       apiKey,
     }),
   });
+  
+  console.log('API response status:', response.status);
 
   if (!response.ok) {
-    throw new Error('AI extraction failed');
+    const errorText = await response.text();
+    console.error('AI extraction failed:', response.status, errorText);
+    
+    // Try to parse JSON error response
+    try {
+      const errorJson = JSON.parse(errorText);
+      throw new Error(errorJson.error || `AI extraction failed: ${errorText}`);
+    } catch {
+      throw new Error(`AI extraction failed: ${errorText}`);
+    }
   }
 
   const reader = response.body?.getReader();

@@ -30,7 +30,14 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
     serviceType: '',
     city: '',
     phone: '',
+    email: '',
+    email2: '',
+    email3: '',
     website: '',
+    instagram_url: '',
+    facebook_url: '',
+    linkedin_url: '',
+    twitter_url: '',
     leadSource: 'Instagram Manual' as 'FB Ad Library' | 'Instagram Manual' | 'Google Maps',
     runningAds: false,
     notes: '',
@@ -49,7 +56,14 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
         serviceType: lead.service_type || '',
         city: lead.city || '',
         phone: lead.phone || '',
+        email: lead.email || '',
+        email2: lead.email2 || '',
+        email3: lead.email3 || '',
         website: lead.website || '',
+        instagram_url: lead.instagram_url || '',
+        facebook_url: lead.facebook_url || '',
+        linkedin_url: lead.linkedin_url || '',
+        twitter_url: lead.twitter_url || '',
         leadSource: lead.lead_source || 'Instagram Manual',
         runningAds: lead.running_ads || false,
         notes: lead.notes || '',
@@ -74,15 +88,21 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
         service_type: formData.serviceType || null,
         city: formData.city || null,
         phone: formData.phone || null,
+        email: formData.email || null,
+        email2: formData.email2 || null,
+        email3: formData.email3 || null,
         website: formData.website || null,
+        instagram_url: formData.instagram_url || (formData.handle 
+          ? `https://www.instagram.com/${formData.handle.replace('@', '')}` 
+          : null),
+        facebook_url: formData.facebook_url || null,
+        linkedin_url: formData.linkedin_url || null,
+        twitter_url: formData.twitter_url || null,
         lead_source: formData.leadSource,
         running_ads: formData.runningAds,
         notes: formData.notes || null,
         ad_copy: formData.adCopy || null,
         price_info: formData.priceInfo || null,
-        instagram_url: formData.handle 
-          ? `https://www.instagram.com/${formData.handle.replace('@', '')}` 
-          : null,
       };
 
       const updatedLead = await updateLead(lead.id, updates);
@@ -115,7 +135,7 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
           <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
         </Transition.Child>
 
-        <div className="fixed inset-0 z-10 overflow-y-auto">
+        <div className="fixed inset-0 z-[51] overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
             <Transition.Child
               as={Fragment}
@@ -213,6 +233,19 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
                             
                             <div>
                               <label className="block text-sm font-medium text-gray-700">
+                                Email
+                              </label>
+                              <input
+                                type="email"
+                                value={formData.email}
+                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                placeholder="email@example.com"
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                              />
+                            </div>
+                            
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700">
                                 Website
                               </label>
                               <input
@@ -237,6 +270,96 @@ export default function EditLeadModal({ open, onClose, lead }: EditLeadModalProp
                                 <option value="FB Ad Library">FB Ad Library</option>
                                 <option value="Google Maps">Google Maps</option>
                               </select>
+                            </div>
+                          </div>
+
+                          {/* Additional Contact Info */}
+                          <div className="border-t pt-4">
+                            <h4 className="text-sm font-medium text-gray-900 mb-3">Additional Contact Info</h4>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700">
+                                  Email 2
+                                </label>
+                                <input
+                                  type="email"
+                                  value={formData.email2}
+                                  onChange={(e) => setFormData({ ...formData, email2: e.target.value })}
+                                  placeholder="alternate@example.com"
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                />
+                              </div>
+                              
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700">
+                                  Email 3
+                                </label>
+                                <input
+                                  type="email"
+                                  value={formData.email3}
+                                  onChange={(e) => setFormData({ ...formData, email3: e.target.value })}
+                                  placeholder="another@example.com"
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Social Media */}
+                          <div className="border-t pt-4">
+                            <h4 className="text-sm font-medium text-gray-900 mb-3">Social Media Profiles</h4>
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700">
+                                  Instagram URL
+                                </label>
+                                <input
+                                  type="text"
+                                  value={formData.instagram_url}
+                                  onChange={(e) => setFormData({ ...formData, instagram_url: e.target.value })}
+                                  placeholder="https://instagram.com/username"
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                />
+                              </div>
+                              
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700">
+                                  Facebook URL
+                                </label>
+                                <input
+                                  type="text"
+                                  value={formData.facebook_url}
+                                  onChange={(e) => setFormData({ ...formData, facebook_url: e.target.value })}
+                                  placeholder="https://facebook.com/pagename"
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                />
+                              </div>
+                              
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700">
+                                  LinkedIn URL
+                                </label>
+                                <input
+                                  type="text"
+                                  value={formData.linkedin_url}
+                                  onChange={(e) => setFormData({ ...formData, linkedin_url: e.target.value })}
+                                  placeholder="https://linkedin.com/company/name"
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                />
+                              </div>
+                              
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700">
+                                  Twitter/X URL
+                                </label>
+                                <input
+                                  type="text"
+                                  value={formData.twitter_url}
+                                  onChange={(e) => setFormData({ ...formData, twitter_url: e.target.value })}
+                                  placeholder="https://twitter.com/username"
+                                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                />
+                              </div>
                             </div>
                           </div>
 

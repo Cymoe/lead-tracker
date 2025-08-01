@@ -34,20 +34,20 @@ export default function SimpleHeader({
   const { selectedLeads, leads } = useLeadStore();
 
   return (
-    <div className="flex justify-between items-center mb-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Lead Dashboard</h2>
-        <p className="text-sm text-gray-600 mt-1">
-          {leads.length} total leads{selectedLeads.length > 0 && ` • ${selectedLeads.length} selected`}
-        </p>
+    <div className="flex justify-between items-center">
+      <div className="flex items-center gap-2">
+        <h1 className="text-base font-semibold text-gray-900">Leads</h1>
+        <span className="text-xs text-gray-400">
+          {leads.length.toLocaleString()}{selectedLeads.length > 0 && ` · ${selectedLeads.length} selected`}
+        </span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {/* Import Button */}
         <Menu as="div" className="relative inline-block text-left">
-          <Menu.Button className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white focus:ring-blue-500 transition-colors shadow-sm">
-            <CloudArrowUpIcon className="h-4 w-4 mr-2" />
-            Import
+          <Menu.Button className="inline-flex items-center px-2 py-1 text-xs font-medium rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+            <CloudArrowUpIcon className="h-3.5 w-3.5" />
+            <span className="ml-1">Import</span>
           </Menu.Button>
           <Transition
             as={Fragment}
@@ -119,9 +119,9 @@ export default function SimpleHeader({
 
         {/* Export Button */}
         <Menu as="div" className="relative inline-block text-left">
-          <Menu.Button className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white focus:ring-blue-500 transition-colors shadow-sm">
-            <DocumentArrowDownIcon className="h-4 w-4 mr-2" />
-            Export
+          <Menu.Button className="inline-flex items-center px-2 py-1 text-xs font-medium rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+            <DocumentArrowDownIcon className="h-3.5 w-3.5" />
+            <span className="ml-1">Export</span>
           </Menu.Button>
           <Transition
             as={Fragment}

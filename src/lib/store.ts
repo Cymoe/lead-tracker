@@ -21,7 +21,12 @@ interface LeadStore {
     adLibrary: boolean;
     googleMaps: boolean;
   };
+  cityFilter: string;
+  serviceTypeFilter: string;
   toggleSourceFilter: (source: 'instagram' | 'adLibrary' | 'googleMaps') => void;
+  setSourceFilter: (filter: { instagram: boolean; adLibrary: boolean; googleMaps: boolean }) => void;
+  setCityFilter: (city: string) => void;
+  setServiceTypeFilter: (serviceType: string) => void;
   
   // Keyword Session
   keywordSession: KeywordSession;
@@ -33,8 +38,12 @@ interface LeadStore {
   // Settings
   googleScriptUrl: string;
   openaiApiKey: string;
+  viewMode: 'table' | 'grid';
+  viewDensity: 'compact' | 'expanded';
   setGoogleScriptUrl: (url: string) => void;
   setOpenAIApiKey: (key: string) => void;
+  setViewMode: (mode: 'table' | 'grid') => void;
+  setViewDensity: (density: 'compact' | 'expanded') => void;
 }
 
 export const useLeadStore = create<LeadStore>((set) => ({
@@ -61,12 +70,17 @@ export const useLeadStore = create<LeadStore>((set) => ({
     adLibrary: true,
     googleMaps: true,
   },
+  cityFilter: 'all',
+  serviceTypeFilter: 'all',
   toggleSourceFilter: (source) => set((state) => ({
     sourceFilter: {
       ...state.sourceFilter,
       [source]: !state.sourceFilter[source]
     }
   })),
+  setSourceFilter: (filter) => set({ sourceFilter: filter }),
+  setCityFilter: (city) => set({ cityFilter: city }),
+  setServiceTypeFilter: (serviceType) => set({ serviceTypeFilter: serviceType }),
   
   // Keyword session
   keywordSession: {
@@ -117,6 +131,8 @@ export const useLeadStore = create<LeadStore>((set) => ({
   // Settings
   googleScriptUrl: typeof window !== 'undefined' ? localStorage.getItem('googleScriptUrl') || '' : '',
   openaiApiKey: typeof window !== 'undefined' ? localStorage.getItem('openaiApiKey') || '' : '',
+  viewMode: (typeof window !== 'undefined' ? localStorage.getItem('viewMode') || 'table' : 'table') as 'table' | 'grid',
+  viewDensity: (typeof window !== 'undefined' ? localStorage.getItem('viewDensity') || 'expanded' : 'expanded') as 'compact' | 'expanded',
   
   setGoogleScriptUrl: (url) => {
     if (typeof window !== 'undefined') {
@@ -130,5 +146,19 @@ export const useLeadStore = create<LeadStore>((set) => ({
       localStorage.setItem('openaiApiKey', key);
     }
     set({ openaiApiKey: key });
+  },
+  
+  setViewMode: (mode) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('viewMode', mode);
+    }
+    set({ viewMode: mode });
+  },
+  
+  setViewDensity: (density) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('viewDensity', density);
+    }
+    set({ viewDensity: density });
   },
 }))

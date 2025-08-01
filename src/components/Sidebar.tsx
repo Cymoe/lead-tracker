@@ -13,9 +13,9 @@ import {
   PencilSquareIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  BuildingOfficeIcon,
   MapIcon,
   GlobeAltIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLeadStore } from '@/lib/store';
@@ -70,8 +70,8 @@ export default function Sidebar({
   }, [isCollapsed]);
 
   const navigation = [
-    { name: 'Dashboard', icon: HomeIcon, current: currentPath === '/', onClick: () => router.push('/') },
-    { name: 'Companies', icon: BuildingOfficeIcon, current: currentPath === '/companies', onClick: () => router.push('/companies') },
+    { name: 'Dashboard', icon: HomeIcon, current: currentPath === '/dashboard', onClick: () => router.push('/dashboard') },
+    { name: 'Leads', icon: UserGroupIcon, current: currentPath === '/leads', onClick: () => router.push('/leads') },
     { name: 'Market Analysis', icon: MapIcon, current: currentPath === '/market-analysis', onClick: () => router.push('/market-analysis') },
     { name: 'Analytics', icon: ChartBarIcon, current: currentPath === '/analytics', onClick: () => router.push('/analytics') },
   ];
@@ -143,7 +143,7 @@ export default function Sidebar({
                     <h1 className="text-xl font-bold text-white">🎯 Lead Tracker Pro</h1>
                   </div>
                   <nav className="flex flex-1 flex-col">
-                    <ul role="list" className="flex flex-1 flex-col gap-y-7">
+                    <ul role="list" className="flex flex-1 flex-col gap-y-4">
                       <li>
                         <ul role="list" className="-mx-2 space-y-1">
                           {navigation.map((item) => (
@@ -158,7 +158,7 @@ export default function Sidebar({
                               >
                                 <item.icon
                                   className={`${
-                                    item.current ? 'text-white' : 'text-gray-400 group-hover:text-white'
+                                    item.current ? 'text-gray-900' : 'text-gray-500 group-hover:text-gray-700'
                                   } h-6 w-6 shrink-0`}
                                   aria-hidden="true"
                                 />
@@ -247,47 +247,47 @@ export default function Sidebar({
 
       {/* Static sidebar for desktop */}
       <div className={`hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:flex-col transition-all duration-300 ${
-        isCollapsed ? 'lg:w-20' : 'lg:w-72'
+        isCollapsed ? 'lg:w-16' : 'lg:w-56'
       }`}>
-        <div className={`flex grow flex-col gap-y-5 overflow-y-auto overflow-x-hidden border-r border-gray-800 bg-gray-900 pb-4 ${
-          isCollapsed ? 'px-2' : 'px-6'
+        <div className={`flex grow flex-col gap-y-3 overflow-y-auto overflow-x-hidden border-r border-gray-200 bg-white pb-3 ${
+          isCollapsed ? 'px-1.5' : 'px-3'
         }`}>
-          <div className="flex h-16 shrink-0 items-center justify-between">
-            {showText && <h1 className="text-xl font-bold text-white transition-opacity duration-200">🎯 Lead Tracker Pro</h1>}
-            {isCollapsed && <span className="text-2xl mx-auto">🎯</span>}
+          <div className="flex h-12 shrink-0 items-center justify-between">
+            {showText && <h1 className="text-sm font-semibold text-gray-200 transition-opacity duration-200">Lead Tracker</h1>}
+            {isCollapsed && <span className="text-base mx-auto">🎯</span>}
             <button
               onClick={onToggleCollapse}
               className={`${
                 isCollapsed ? 'mx-auto' : 'ml-auto'
-              } p-1.5 rounded-md hover:bg-gray-800 text-gray-400 hover:text-white transition-colors`}
+              } p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors`}
               aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {isCollapsed ? (
-                <ChevronRightIcon className="h-5 w-5" />
+                <ChevronRightIcon className="h-4 w-4" />
               ) : (
-                <ChevronLeftIcon className="h-5 w-5" />
+                <ChevronLeftIcon className="h-4 w-4" />
               )}
             </button>
           </div>
           <nav className="flex flex-1 flex-col">
-            <ul role="list" className="flex flex-1 flex-col gap-y-7">
+            <ul role="list" className="flex flex-1 flex-col gap-y-4">
               <li>
-                <ul role="list" className={`${isCollapsed ? '-mx-1' : '-mx-2'} space-y-1`}>
+                <ul role="list" className={`${isCollapsed ? '-mx-0.5' : '-mx-1'} space-y-0.5`}>
                   {navigation.map((item) => (
                     <li key={item.name}>
                       <button
                         onClick={item.onClick}
                         className={`${
                           item.current
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:text-white hover:bg-gray-800'
-                        } group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold w-full transition-colors`}
+                            ? 'bg-gray-100 text-gray-900'
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                        } group flex gap-x-2 rounded p-1.5 text-xs leading-5 font-medium w-full transition-colors`}
                         title={isCollapsed ? item.name : undefined}
                       >
                         <item.icon
                           className={`${
-                            item.current ? 'text-white' : 'text-gray-400 group-hover:text-white'
-                          } h-6 w-6 shrink-0 ${isCollapsed ? 'mx-auto' : ''}`}
+                            item.current ? 'text-gray-900' : 'text-gray-500 group-hover:text-gray-700'
+                          } h-4 w-4 shrink-0 ${isCollapsed ? 'mx-auto' : ''}`}
                           aria-hidden="true"
                         />
                         {showText && (
@@ -301,20 +301,20 @@ export default function Sidebar({
               
               <li>
                 {showText && (
-                  <div className="text-xs font-semibold leading-6 text-gray-500 transition-opacity duration-200">
+                  <div className="text-xs font-medium leading-5 text-gray-400 uppercase tracking-wider transition-opacity duration-200 px-2">
                     Actions
                   </div>
                 )}
-                <ul role="list" className={`${isCollapsed ? '-mx-1' : '-mx-2'} mt-2 space-y-1`}>
+                <ul role="list" className={`${isCollapsed ? '-mx-0.5' : '-mx-1'} mt-1 space-y-0.5`}>
                   {actions.map((item) => (
                     <li key={item.name}>
                       <button
                         onClick={item.onClick}
-                        className="text-gray-300 hover:text-white hover:bg-gray-800 group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold w-full transition-colors"
+                        className="text-gray-600 hover:text-gray-900 hover:bg-gray-50 group flex gap-x-2 rounded p-1.5 text-xs leading-5 font-medium w-full transition-colors"
                         title={isCollapsed ? item.name : undefined}
                       >
                         <item.icon
-                          className={`text-gray-400 group-hover:text-white h-6 w-6 shrink-0 ${
+                          className={`text-gray-400 group-hover:text-gray-600 h-4 w-4 shrink-0 ${
                             isCollapsed ? 'mx-auto' : ''
                           }`}
                           aria-hidden="true"
@@ -330,20 +330,20 @@ export default function Sidebar({
 
               <li>
                 {showText && (
-                  <div className="text-xs font-semibold leading-6 text-gray-500 transition-opacity duration-200">
+                  <div className="text-xs font-medium leading-5 text-gray-400 uppercase tracking-wider transition-opacity duration-200 px-2">
                     Tools
                   </div>
                 )}
-                <ul role="list" className={`${isCollapsed ? '-mx-1' : '-mx-2'} mt-2 space-y-1`}>
+                <ul role="list" className={`${isCollapsed ? '-mx-0.5' : '-mx-1'} mt-1 space-y-0.5`}>
                   {tools.map((item) => (
                     <li key={item.name}>
                       <button
                         onClick={item.onClick}
-                        className="text-gray-300 hover:text-white hover:bg-gray-800 group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold w-full transition-colors"
+                        className="text-gray-600 hover:text-gray-900 hover:bg-gray-50 group flex gap-x-2 rounded p-1.5 text-xs leading-5 font-medium w-full transition-colors"
                         title={isCollapsed ? item.name : undefined}
                       >
                         <item.icon
-                          className={`text-gray-400 group-hover:text-white h-6 w-6 shrink-0 ${
+                          className={`text-gray-400 group-hover:text-gray-600 h-4 w-4 shrink-0 ${
                             isCollapsed ? 'mx-auto' : ''
                           }`}
                           aria-hidden="true"
@@ -358,14 +358,14 @@ export default function Sidebar({
               </li>
 
               <li className="mt-auto">
-                <div className="border-t border-gray-800 pt-4">
+                <div className="border-t border-gray-200 pt-3">
                   <button
                     onClick={onSettings}
-                    className="text-gray-300 hover:text-white hover:bg-gray-800 group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold w-full transition-colors"
+                    className="text-gray-600 hover:text-gray-900 hover:bg-gray-50 group flex gap-x-2 rounded p-1.5 text-xs leading-5 font-medium w-full transition-colors"
                     title={isCollapsed ? "Settings" : undefined}
                   >
                     <Cog6ToothIcon
-                      className={`text-gray-400 group-hover:text-white h-6 w-6 shrink-0 ${
+                      className={`text-gray-400 group-hover:text-gray-600 h-4 w-4 shrink-0 ${
                         isCollapsed ? 'mx-auto' : ''
                       }`}
                       aria-hidden="true"
@@ -376,11 +376,11 @@ export default function Sidebar({
                   </button>
                   <button
                     onClick={signOut}
-                    className="text-gray-300 hover:text-white hover:bg-gray-800 group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold w-full transition-colors"
+                    className="text-gray-600 hover:text-gray-900 hover:bg-gray-50 group flex gap-x-2 rounded p-1.5 text-xs leading-5 font-medium w-full transition-colors"
                     title={isCollapsed ? "Sign out" : undefined}
                   >
                     <ArrowRightOnRectangleIcon
-                      className={`text-gray-400 group-hover:text-white h-6 w-6 shrink-0 ${
+                      className={`text-gray-400 group-hover:text-gray-600 h-4 w-4 shrink-0 ${
                         isCollapsed ? 'mx-auto' : ''
                       }`}
                       aria-hidden="true"
@@ -390,8 +390,8 @@ export default function Sidebar({
                     )}
                   </button>
                   {showText && (
-                    <div className="mt-2 px-2 transition-opacity duration-200">
-                      <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                    <div className="mt-1.5 px-2 transition-opacity duration-200">
+                      <p className="text-xs text-gray-400 truncate">{user?.email}</p>
                     </div>
                   )}
                 </div>

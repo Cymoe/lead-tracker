@@ -103,51 +103,80 @@ function parseCSVLine(line: string): string[] {
 /**
  * Common field mappings for different CSV formats
  */
-export const commonFieldMappings: Record<string, FieldMapping[]> = {
-  // Generic mapping
-  generic: [
-    { csvField: 'Company', leadField: 'company_name' },
-    { csvField: 'Company Name', leadField: 'company_name' },
-    { csvField: 'Business Name', leadField: 'company_name' },
-    { csvField: 'Name', leadField: 'company_name' },
-    { csvField: 'Phone', leadField: 'phone' },
-    { csvField: 'Phone Number', leadField: 'phone' },
-    { csvField: 'Mobile', leadField: 'phone' },
-    { csvField: 'City', leadField: 'city' },
-    { csvField: 'Location', leadField: 'city' },
-    { csvField: 'Service', leadField: 'service_type' },
-    { csvField: 'Service Type', leadField: 'service_type' },
-    { csvField: 'Category', leadField: 'service_type' },
-    { csvField: 'Website', leadField: 'website' },
-    { csvField: 'URL', leadField: 'website' },
-    { csvField: 'Instagram', leadField: 'handle' },
-    { csvField: 'Instagram Handle', leadField: 'handle' },
-    { csvField: 'IG Handle', leadField: 'handle' },
-    { csvField: 'Notes', leadField: 'notes' },
-    { csvField: 'Comments', leadField: 'notes' },
-    { csvField: 'Description', leadField: 'notes' },
-  ],
+export const commonFieldMappings: FieldMapping[] = [
+  // Company/Name mappings
+  { csvField: 'Company', leadField: 'company_name' },
+  { csvField: 'Company Name', leadField: 'company_name' },
+  { csvField: 'Business Name', leadField: 'company_name' },
+  { csvField: 'Name', leadField: 'company_name' },
   
-  // Close CRM export format
-  closeCRM: [
-    { csvField: 'lead_name', leadField: 'company_name' },
-    { csvField: 'primary_phone', leadField: 'phone' },
-    { csvField: 'company_website', leadField: 'website' },
-    { csvField: 'custom.cf_service_type', leadField: 'service_type' },
-    { csvField: 'custom.cf_city', leadField: 'city' },
-    { csvField: 'custom.cf_instagram_handle', leadField: 'handle' },
-    { csvField: 'description', leadField: 'notes' },
-  ],
+  // Phone mappings
+  { csvField: 'Phone', leadField: 'phone' },
+  { csvField: 'Phone Number', leadField: 'phone' },
+  { csvField: 'Mobile', leadField: 'phone' },
   
-  // Google Maps export format
-  googleMaps: [
-    { csvField: 'Title', leadField: 'company_name' },
-    { csvField: 'Phone', leadField: 'phone' },
-    { csvField: 'Website', leadField: 'website' },
-    { csvField: 'Address', leadField: 'city' }, // Will need to extract city from address
-    { csvField: 'Category', leadField: 'service_type' },
-  ]
-};
+  // Location mappings
+  { csvField: 'City', leadField: 'city' },
+  { csvField: 'Location', leadField: 'city' },
+  { csvField: 'State', leadField: 'state' },
+  { csvField: 'Address', leadField: 'address' },
+  { csvField: 'Full Address', leadField: 'full_address' },
+  { csvField: 'full_address', leadField: 'full_address' },
+  
+  // Service/Category mappings
+  { csvField: 'Service', leadField: 'service_type' },
+  { csvField: 'Service Type', leadField: 'service_type' },
+  { csvField: 'Category', leadField: 'service_type' },
+  
+  // Website mappings
+  { csvField: 'Website', leadField: 'website' },
+  { csvField: 'URL', leadField: 'website' },
+  { csvField: 'Site', leadField: 'website' },
+  
+  // Email mappings
+  { csvField: 'Email', leadField: 'email' },
+  { csvField: 'Email Address', leadField: 'email' },
+  { csvField: 'email_1', leadField: 'email' },
+  { csvField: 'email_2', leadField: 'email2' },
+  { csvField: 'email_3', leadField: 'email3' },
+  
+  // Social media mappings
+  { csvField: 'Instagram', leadField: 'instagram_url' },
+  { csvField: 'Instagram Handle', leadField: 'handle' },
+  { csvField: 'IG Handle', leadField: 'handle' },
+  { csvField: 'Facebook', leadField: 'facebook_url' },
+  { csvField: 'FB', leadField: 'facebook_url' },
+  { csvField: 'LinkedIn', leadField: 'linkedin_url' },
+  { csvField: 'Linkedin', leadField: 'linkedin_url' },
+  { csvField: 'Twitter', leadField: 'twitter_url' },
+  { csvField: 'X', leadField: 'twitter_url' },
+  
+  // Search query mapping
+  { csvField: 'Query', leadField: 'search_query' },
+  { csvField: 'Search Query', leadField: 'search_query' },
+  { csvField: 'Keywords', leadField: 'search_query' },
+  
+  // Notes mappings
+  { csvField: 'Notes', leadField: 'notes' },
+  { csvField: 'Comments', leadField: 'notes' },
+  { csvField: 'Description', leadField: 'notes' },
+  
+  // CloseCRM specific mappings
+  { csvField: 'lead_name', leadField: 'company_name' },
+  { csvField: 'primary_phone', leadField: 'phone' },
+  { csvField: 'company_website', leadField: 'website' },
+  { csvField: 'custom.cf_service_type', leadField: 'service_type' },
+  { csvField: 'custom.cf_city', leadField: 'city' },
+  { csvField: 'custom.cf_instagram_handle', leadField: 'handle' },
+  { csvField: 'description', leadField: 'notes' },
+  
+  // Google Maps specific mappings
+  { csvField: 'Title', leadField: 'company_name' },
+  { csvField: 'Phone', leadField: 'phone' },
+  { csvField: 'Website', leadField: 'website' },
+  { csvField: 'Address', leadField: 'city' }, // Will need to extract city from address
+  { csvField: 'Category', leadField: 'service_type' },
+];
 
 /**
  * Auto-detect field mappings based on headers
@@ -157,22 +186,20 @@ export function autoDetectMappings(headers: string[]): FieldMapping[] {
   const normalizedHeaders = headers.map(h => h.toLowerCase().trim());
   
   // Try all common mappings
-  Object.values(commonFieldMappings).forEach(mappingSet => {
-    mappingSet.forEach(mapping => {
-      const csvFieldLower = mapping.csvField.toLowerCase();
-      const matchIndex = normalizedHeaders.findIndex(h => 
-        h === csvFieldLower || 
-        h.includes(csvFieldLower) || 
-        csvFieldLower.includes(h)
-      );
-      
-      if (matchIndex !== -1 && !mappings.some(m => m.leadField === mapping.leadField)) {
-        mappings.push({
-          ...mapping,
-          csvField: headers[matchIndex] // Use original header
-        });
-      }
-    });
+  commonFieldMappings.forEach(mapping => {
+    const csvFieldLower = mapping.csvField.toLowerCase();
+    const matchIndex = normalizedHeaders.findIndex(h => 
+      h === csvFieldLower || 
+      h.includes(csvFieldLower) || 
+      csvFieldLower.includes(h)
+    );
+    
+    if (matchIndex !== -1 && !mappings.some(m => m.leadField === mapping.leadField)) {
+      mappings.push({
+        ...mapping,
+        csvField: headers[matchIndex] // Use original header
+      });
+    }
   });
   
   return mappings;
@@ -206,6 +233,12 @@ export function transformToLeads(
             case 'website':
               (lead as any)[mapping.leadField] = normalizeWebsite(value);
               break;
+            case 'instagram_url':
+            case 'facebook_url':
+            case 'linkedin_url':
+            case 'twitter_url':
+              (lead as any)[mapping.leadField] = normalizeSocialUrl(value, mapping.leadField);
+              break;
             case 'running_ads':
               (lead as any)[mapping.leadField] = value.toLowerCase() === 'yes' || value.toLowerCase() === 'true';
               break;
@@ -219,6 +252,25 @@ export function transformToLeads(
     // Set Instagram URL if handle is provided
     if (lead.handle && !lead.instagram_url) {
       lead.instagram_url = `https://www.instagram.com/${lead.handle.replace('@', '')}`;
+    }
+    
+    // If full_address is provided but not individual city/state, try to parse
+    if (lead.full_address && (!lead.city || !lead.state)) {
+      const addressParts = parseAddress(lead.full_address);
+      if (!lead.city && addressParts.city) lead.city = addressParts.city;
+      if (!lead.state && addressParts.state) lead.state = addressParts.state;
+    }
+    
+    // Add CSV import note
+    const importDate = new Date().toLocaleDateString();
+    const csvNote = `📊 Imported from CSV on ${importDate}`;
+    const searchQuery = lead.search_query ? `\n🔍 Search: ${lead.search_query}` : '';
+    const importNote = `${csvNote}${searchQuery}`;
+    
+    if (lead.notes) {
+      lead.notes = `${importNote}\n\n${lead.notes}`;
+    } else {
+      lead.notes = importNote;
     }
     
     return lead;
@@ -279,6 +331,80 @@ function normalizeWebsite(website: string): string {
   return normalized;
 }
 
+// Add this function to ensure URLs have protocols when displayed
+export function ensureProtocol(url: string | null | undefined): string | null {
+  if (!url) return null;
+  
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  
+  // Check if it already has a protocol
+  if (trimmed.match(/^https?:\/\//i)) {
+    return trimmed;
+  }
+  
+  // Add https:// by default
+  return `https://${trimmed}`;
+}
+
+/**
+ * Normalize social media URLs
+ */
+function normalizeSocialUrl(url: string, fieldName: string): string {
+  if (!url || !url.trim()) return '';
+  
+  let normalized = url.trim();
+  
+  // If it's just a username/handle, convert to full URL
+  if (!normalized.includes('://')) {
+    const username = normalized.replace('@', '');
+    
+    switch (fieldName) {
+      case 'instagram_url':
+        return `https://www.instagram.com/${username}`;
+      case 'facebook_url':
+        return `https://www.facebook.com/${username}`;
+      case 'linkedin_url':
+        return normalized.includes('/company/') 
+          ? `https://www.linkedin.com${normalized}`
+          : `https://www.linkedin.com/company/${username}`;
+      case 'twitter_url':
+        return `https://twitter.com/${username}`;
+      default:
+        return normalized;
+    }
+  }
+  
+  // Already a URL, just ensure it has protocol
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    return `https://${normalized}`;
+  }
+  
+  return normalized;
+}
+
+/**
+ * Parse address into components
+ */
+function parseAddress(fullAddress: string): { city?: string; state?: string } {
+  // Simple parser - looks for "City, State" pattern
+  const parts = fullAddress.split(',').map(p => p.trim());
+  
+  if (parts.length >= 2) {
+    // Assume second-to-last is city, last is state (with possible zip)
+    const city = parts[parts.length - 2];
+    const stateZip = parts[parts.length - 1];
+    
+    // Extract state abbreviation (first 2 uppercase letters)
+    const stateMatch = stateZip.match(/\b[A-Z]{2}\b/);
+    const state = stateMatch ? stateMatch[0] : undefined;
+    
+    return { city, state };
+  }
+  
+  return {};
+}
+
 /**
  * Validate that required fields are present
  */
@@ -296,7 +422,10 @@ export function validateLeads(leads: Partial<Lead>[]): {
       // Set defaults for required fields
       valid.push({
         ...lead,
+        id: lead.id || crypto.randomUUID(),
+        user_id: lead.user_id || '', // Will be set by the API
         company_name: lead.company_name,
+        lead_source: lead.lead_source || 'Instagram Manual', // Ensure lead_source is always set
         running_ads: lead.running_ads ?? false,
         dm_sent: lead.dm_sent ?? false,
         called: lead.called ?? false,

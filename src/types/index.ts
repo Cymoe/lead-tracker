@@ -39,9 +39,22 @@ export interface Lead {
   company_name: string;
   service_type?: string | null;
   city?: string | null;
+  state?: string | null;
   phone?: string | null;
+  email?: string | null;
+  email2?: string | null;
+  email3?: string | null;
   instagram_url?: string | null;
+  facebook_url?: string | null;
+  linkedin_url?: string | null;
+  twitter_url?: string | null;
   website?: string | null;
+  google_maps_url?: string | null;
+  address?: string | null;
+  full_address?: string | null;
+  search_query?: string | null;
+  rating?: number | null;
+  review_count?: number | null;
   lead_source: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | null;
   running_ads: boolean;
   ad_start_date?: string | null;
@@ -62,6 +75,8 @@ export interface Lead {
   close_crm_id?: string | null;
   created_at: string;
   updated_at: string;
+  // Temporary field for duplicate tracking during import
+  existingId?: string;
 }
 
 export interface KeywordSession {

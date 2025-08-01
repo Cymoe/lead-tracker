@@ -1,6 +1,6 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { XMarkIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, MagnifyingGlassIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { FaFacebook } from 'react-icons/fa';
 import { useLeadStore } from '@/lib/store';
 import { saveLead } from '@/lib/api';
@@ -45,6 +45,104 @@ export default function FacebookAdsSearchModal({ open, onClose }: FacebookAdsSea
   const [hasSearched, setHasSearched] = useState(false);
   const [apiKeyError, setApiKeyError] = useState(false);
   const [limit, setLimit] = useState(50);
+  const [previousSearches, setPreviousSearches] = useState<any[]>([]);
+  const [showPreviousSearches, setShowPreviousSearches] = useState(false);
+  const [isLoadingPreviousSearches, setIsLoadingPreviousSearches] = useState(false);
+  const [currentSearchId, setCurrentSearchId] = useState<string | null>(null);
+  const [searchStartTime, setSearchStartTime] = useState<number>(0);
+
+  // Load previous searches when modal opens
+  useEffect(() => {
+    if (open) {
+      loadPreviousSearches();
+    }
+  }, [open]);
+
+  const loadPreviousSearches = async () => {
+    setIsLoadingPreviousSearches(true);
+    try {
+      const response = await fetch('/api/search-results?searchType=facebook_ads&limit=10');
+      const data = await response.json();
+      if (response.ok) {
+        setPreviousSearches(data.results || []);
+      }
+    } catch (error) {
+      console.error('Error loading previous searches:', error);
+    } finally {
+      setIsLoadingPreviousSearches(false);
+    }
+  };
+
+  const saveSearchResults = async (
+    searchResults: FacebookAdResult[], 
+    searchParams: any,
+    searchDuration?: number
+  ) => {
+    try {
+      // Calculate metrics
+      const highQualityLeads = searchResults.filter(r => r.quality_score >= 80).length;
+      
+      const response = await fetch('/api/search-results', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          searchType: 'facebook_ads',
+          searchParams,
+          results: searchResults,
+          searchMode: 'apify',
+          searchDuration,
+          high_quality_leads: highQualityLeads
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentSearchId(data.id);
+        // Reload previous searches to include the new one
+        loadPreviousSearches();
+      }
+    } catch (error) {
+      console.error('Error saving search results:', error);
+    }
+  };
+
+  const loadSavedSearch = (savedSearch: any) => {
+    // Load the search parameters
+    setKeyword(savedSearch.search_params.keyword || '');
+    setLocation(savedSearch.search_params.location || '');
+    setLimit(savedSearch.search_params.limit || 50);
+    
+    // Load the results
+    setResults(savedSearch.results);
+    setHasSearched(true);
+    setShowPreviousSearches(false);
+    
+    // Auto-select high quality ads
+    const highQualityIds = new Set<string>(
+      savedSearch.results
+        .filter((r: FacebookAdResult) => r.quality_score >= 80)
+        .map((r: FacebookAdResult) => r.id)
+    );
+    setSelectedIds(highQualityIds);
+    
+    toast.success('Previous search loaded!');
+  };
+
+  const deleteSavedSearch = async (id: string) => {
+    try {
+      const response = await fetch(`/api/search-results?id=${id}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        setPreviousSearches(prev => prev.filter(s => s.id !== id));
+        toast.success('Search deleted');
+      }
+    } catch (error) {
+      console.error('Error deleting search:', error);
+      toast.error('Failed to delete search');
+    }
+  };
 
   const handleSearch = async () => {
     if (!keyword || !location) {
@@ -55,6 +153,7 @@ export default function FacebookAdsSearchModal({ open, onClose }: FacebookAdsSea
     setIsSearching(true);
     setApiKeyError(false);
     setHasSearched(true);
+    setSearchStartTime(Date.now());
 
     try {
       const response = await fetch('/api/facebook-ads-search', {
@@ -91,6 +190,10 @@ export default function FacebookAdsSearchModal({ open, onClose }: FacebookAdsSea
       setSelectedIds(highQualityIds);
 
       toast.success(`Found ${data.results.length} active advertisers!`);
+      
+      // Save search results with duration
+      const searchDuration = Math.round((Date.now() - searchStartTime) / 1000);
+      await saveSearchResults(data.results, { keyword, location, limit }, searchDuration);
     } catch (error) {
       console.error('Search error:', error);
       toast.error(error instanceof Error ? error.message : 'Search failed');
@@ -126,6 +229,7 @@ export default function FacebookAdsSearchModal({ open, onClose }: FacebookAdsSea
     }
 
     let successCount = 0;
+    const importedLeadIds: string[] = [];
     const toastId = toast.loading(`Importing ${selectedResults.length} leads...`);
 
     for (const result of selectedResults) {
@@ -164,10 +268,27 @@ export default function FacebookAdsSearchModal({ open, onClose }: FacebookAdsSea
           if (savedLead) {
             addLead(savedLead);
             successCount++;
+            importedLeadIds.push(savedLead.id);
           }
         } catch (error) {
           console.error('Error saving lead:', error);
         }
+      }
+    }
+
+    // Update the search result with imported lead IDs
+    if (successCount > 0 && currentSearchId) {
+      try {
+        await fetch('/api/search-results/update-imported', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            searchResultId: currentSearchId,
+            importedLeadIds
+          })
+        });
+      } catch (error) {
+        console.error('Error updating imported lead IDs:', error);
       }
     }
 
@@ -184,6 +305,8 @@ export default function FacebookAdsSearchModal({ open, onClose }: FacebookAdsSea
     setSelectedIds(new Set());
     setHasSearched(false);
     setApiKeyError(false);
+    setShowPreviousSearches(false);
+    setCurrentSearchId(null);
   };
 
   const suggestedKeywords = [
@@ -236,6 +359,85 @@ export default function FacebookAdsSearchModal({ open, onClose }: FacebookAdsSea
                         <FaFacebook className="h-6 w-6 mr-2 text-[#1877F2]" />
                         Facebook Ad Library Search
                       </Dialog.Title>
+
+                      {/* Previous Searches Button */}
+                      {previousSearches.length > 0 && !hasSearched && (
+                        <div className="mt-4">
+                          <button
+                            onClick={() => setShowPreviousSearches(!showPreviousSearches)}
+                            className="inline-flex items-center px-3 py-1.5 border border-[#374151] text-sm font-medium rounded-md text-gray-300 bg-[#111827] hover:bg-[#1F2937]"
+                          >
+                            <ClockIcon className="h-4 w-4 mr-2" />
+                            Previous Searches ({previousSearches.length})
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Previous Searches List */}
+                      {showPreviousSearches && (
+                        <div className="mt-4 bg-[#111827] rounded-lg p-4 max-h-60 overflow-y-auto">
+                          <h4 className="text-sm font-medium text-gray-300 mb-3">Recent Searches (Last 7 days)</h4>
+                          {isLoadingPreviousSearches ? (
+                            <p className="text-sm text-gray-400">Loading...</p>
+                          ) : (
+                            <div className="space-y-3">
+                              {previousSearches.map((search) => {
+                                const daysAgo = Math.floor((Date.now() - new Date(search.created_at).getTime()) / (1000 * 60 * 60 * 24));
+                                const hoursAgo = Math.floor((Date.now() - new Date(search.created_at).getTime()) / (1000 * 60 * 60));
+                                const timeAgo = daysAgo > 0 ? `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago` : `${hoursAgo} hour${hoursAgo !== 1 ? 's' : ''} ago`;
+                                
+                                return (
+                                  <div
+                                    key={search.id}
+                                    className="flex items-center justify-between p-3 bg-[#1F2937] rounded-md hover:bg-[#374151] transition-colors"
+                                  >
+                                    <div className="flex-1">
+                                      <p className="text-sm text-white font-medium">
+                                        "{search.search_params.keyword}" in {search.search_params.location}
+                                      </p>
+                                      <p className="text-xs text-gray-400 mt-1">
+                                        {search.result_count} results • {timeAgo}
+                                        {search.search_duration_seconds && ` • ${search.search_duration_seconds}s`}
+                                      </p>
+                                      {search.high_quality_leads > 0 && (
+                                        <p className="text-xs text-[#EAB308] mt-1">
+                                          ⭐ {search.high_quality_leads} high-quality leads
+                                        </p>
+                                      )}
+                                      {search.imported_lead_ids?.length > 0 && (
+                                        <p className="text-xs text-[#3B82F6] mt-1">
+                                          ✓ {search.imported_lead_ids.length} imported
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 ml-4">
+                                      <button
+                                        onClick={() => loadSavedSearch(search)}
+                                        className="text-sm text-[#3B82F6] hover:text-[#60A5FA]"
+                                      >
+                                        Load
+                                      </button>
+                                      <button
+                                        onClick={() => window.open(`/api/search-results/export?id=${search.id}`, '_blank')}
+                                        className="text-sm text-[#10B981] hover:text-[#34D399]"
+                                        title="Export to CSV"
+                                      >
+                                        CSV
+                                      </button>
+                                      <button
+                                        onClick={() => deleteSavedSearch(search.id)}
+                                        className="text-sm text-[#EF4444] hover:text-[#F87171]"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Search Form */}
                       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-4">
@@ -337,30 +539,48 @@ export default function FacebookAdsSearchModal({ open, onClose }: FacebookAdsSea
                           </div>
 
                           <div className="max-h-96 overflow-y-auto border border-[#374151] rounded-lg">
-                            {results.map((result) => (
-                              <div
-                                key={result.id}
-                                className={`p-4 border-b border-[#374151] last:border-b-0 cursor-pointer transition-colors ${
-                                  selectedIds.has(result.id) 
-                                    ? 'bg-[#3B82F6]/10' 
-                                    : 'hover:bg-[#374151]/50'
-                                }`}
-                                onClick={() => toggleSelection(result.id)}
-                              >
+                            {results.map((result) => {
+                              // Check if this lead already exists
+                              const isDuplicate = leads.some(
+                                existing => 
+                                  existing.company_name.toLowerCase() === result.page_name.toLowerCase() &&
+                                  existing.city?.toLowerCase() === result.import_ready.city.toLowerCase()
+                              );
+                              
+                              return (
+                                <div
+                                  key={result.id}
+                                  className={`p-4 border-b border-[#374151] last:border-b-0 cursor-pointer transition-colors ${
+                                    selectedIds.has(result.id) 
+                                      ? 'bg-[#3B82F6]/10' 
+                                      : isDuplicate
+                                      ? 'bg-[#374151]/20'
+                                      : 'hover:bg-[#374151]/50'
+                                  }`}
+                                  onClick={() => !isDuplicate && toggleSelection(result.id)}
+                                >
                                 <div className="flex items-start gap-3">
                                   <div className="flex-shrink-0 mt-1">
                                     <input
                                       type="checkbox"
                                       checked={selectedIds.has(result.id)}
                                       onChange={() => {}}
-                                      className="h-4 w-4 text-[#3B82F6] border-[#374151] rounded focus:ring-[#3B82F6]"
+                                      disabled={isDuplicate}
+                                      className="h-4 w-4 text-[#3B82F6] border-[#374151] rounded focus:ring-[#3B82F6] disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                   </div>
                                   
                                   <div className="flex-grow">
                                     <div className="flex items-start justify-between">
                                       <div>
-                                        <h5 className="font-medium text-white">{result.page_name}</h5>
+                                        <div className="flex items-center gap-2">
+                                          <h5 className="font-medium text-white">{result.page_name}</h5>
+                                          {isDuplicate && (
+                                            <span className="text-xs bg-[#EF4444]/20 text-[#EF4444] px-2 py-0.5 rounded">
+                                              Already imported
+                                            </span>
+                                          )}
+                                        </div>
                                         <p className="text-sm text-gray-400 mt-1">
                                           {result.import_ready.service_type} • {result.import_ready.city}
                                         </p>
@@ -395,7 +615,8 @@ export default function FacebookAdsSearchModal({ open, onClose }: FacebookAdsSea
                                   </div>
                                 </div>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}

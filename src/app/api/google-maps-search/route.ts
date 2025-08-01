@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
     
-    // First, geocode the city to get coordinates
+    // Geocode the city
     const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(city)}&key=${googleApiKey}`;
     const geocodeResponse = await fetch(geocodeUrl);
     const geocodeData = await geocodeResponse.json();
@@ -57,27 +57,50 @@ export async function POST(request: NextRequest) {
     
     const { lat, lng } = geocodeData.results[0].geometry.location;
     
-    // Search for businesses
-    const searchQuery = `${serviceType} near ${city}`;
-    const placesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?` + 
-      new URLSearchParams({
-        location: `${lat},${lng}`,
-        radius: radius.toString(),
-        keyword: searchQuery,
-        key: googleApiKey,
-        type: 'establishment'
-      }).toString();
+    // Collect all results from multiple pages
+    let allResults: any[] = [];
+    let nextPageToken: string | null = null;
+    let pageCount = 0;
+    const maxPages = 3; // Google allows max 3 pages (60 results total)
     
-    const placesResponse = await fetch(placesUrl);
-    const placesData = await placesResponse.json();
+    // Search for businesses with pagination
+    do {
+      const searchQuery = `${serviceType} near ${city}`;
+      let placesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?` + 
+        new URLSearchParams({
+          location: `${lat},${lng}`,
+          radius: radius.toString(),
+          keyword: searchQuery,
+          key: googleApiKey,
+          type: 'establishment'
+        }).toString();
+      
+      // Add page token if we have one
+      if (nextPageToken) {
+        placesUrl += `&pagetoken=${nextPageToken}`;
+        // Google requires a short delay between pagination requests
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      
+      const placesResponse = await fetch(placesUrl);
+      const placesData = await placesResponse.json();
+      
+      if (placesData.results) {
+        allResults = [...allResults, ...placesData.results];
+      }
+      
+      nextPageToken = placesData.next_page_token || null;
+      pageCount++;
+      
+    } while (nextPageToken && pageCount < maxPages);
     
-    if (!placesData.results) {
+    if (allResults.length === 0) {
       return NextResponse.json({ error: 'No results found' }, { status: 404 });
     }
     
-    // Get detailed information for each place
+    // Get detailed information for each place (limit to 60 to avoid rate limits)
     const detailedResults = await Promise.all(
-      placesData.results.slice(0, 20).map(async (place: any) => {
+      allResults.slice(0, 60).map(async (place: any) => {
         const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?` +
           new URLSearchParams({
             place_id: place.place_id,

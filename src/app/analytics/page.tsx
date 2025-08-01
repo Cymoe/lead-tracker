@@ -57,7 +57,7 @@ export default function AnalyticsPage() {
   // Calculate analytics data
   const analytics = {
     totalLeads: leads.length,
-    contactRate: leads.length > 0 ? ((leads.filter(l => l.dm_sent || l.called).length / leads.length) * 100).toFixed(1) : '0.0',
+    runningAds: leads.filter(l => l.running_ads).length,
     dataQuality: leads.length > 0 ? ((leads.filter(l => l.phone || l.instagram_url || l.website).length / leads.length) * 100).toFixed(1) : '0.0',
     leadSources: {
       'Instagram Manual': leads.filter(l => l.lead_source === 'Instagram Manual').length,
@@ -77,15 +77,19 @@ export default function AnalyticsPage() {
     phoneNumbers: leads.filter(l => l.phone).length,
     instagramHandles: leads.filter(l => l.handle).length,
     websites: leads.filter(l => l.website).length,
+    emails: leads.filter(l => l.email).length,
+    exportedToClose: leads.filter(l => l.close_crm_id).length,
   };
 
   // Sort cities and services by count
   const sortedCities = Object.entries(analytics.topCities).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const sortedServices = Object.entries(analytics.topServices).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-  // Calculate trend (mock data for now - in real app, you'd track historical data)
-  const trendPercentage = 100.0; // Since all leads are new
-  const contactedCount = leads.filter(l => l.dm_sent || l.called).length;
+  // Calculate week-over-week trend
+  const thisWeek = new Date();
+  thisWeek.setDate(thisWeek.getDate() - 7);
+  const leadsThisWeek = leads.filter(l => new Date(l.created_at) >= thisWeek).length;
+  const trendPercentage = leads.length > 0 ? ((leadsThisWeek / leads.length) * 100).toFixed(0) : '0';
 
   if (loading) {
     return (
@@ -140,9 +144,9 @@ export default function AnalyticsPage() {
               </div>
 
               <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-                <p className="text-gray-600 text-sm">Contact Rate</p>
-                <p className="text-4xl font-bold text-gray-900 mt-2">{analytics.contactRate}%</p>
-                <p className="text-gray-500 text-sm mt-2">{contactedCount} contacted</p>
+                <p className="text-gray-600 text-sm">Running Ads</p>
+                <p className="text-4xl font-bold text-gray-900 mt-2">{analytics.runningAds}</p>
+                <p className="text-gray-500 text-sm mt-2">{analytics.totalLeads > 0 ? ((analytics.runningAds / analytics.totalLeads) * 100).toFixed(0) : '0'}% of leads</p>
               </div>
 
               <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
@@ -215,6 +219,21 @@ export default function AnalyticsPage() {
 
                 <div>
                   <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-600">Email Addresses</span>
+                    <span className="text-gray-900 font-semibold">
+                      {analytics.totalLeads > 0 ? ((analytics.emails / analytics.totalLeads) * 100).toFixed(1) : '0.0'}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-purple-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: analytics.totalLeads > 0 ? `${(analytics.emails / analytics.totalLeads) * 100}%` : '0%' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-2">
                     <span className="text-gray-600">Instagram Handles</span>
                     <span className="text-gray-900 font-semibold">
                       {analytics.totalLeads > 0 ? ((analytics.instagramHandles / analytics.totalLeads) * 100).toFixed(1) : '0.0'}%
@@ -222,7 +241,7 @@ export default function AnalyticsPage() {
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
                     <div 
-                      className="bg-purple-500 h-2 rounded-full transition-all duration-500"
+                      className="bg-pink-500 h-2 rounded-full transition-all duration-500"
                       style={{ width: analytics.totalLeads > 0 ? `${(analytics.instagramHandles / analytics.totalLeads) * 100}%` : '0%' }}
                     />
                   </div>
@@ -239,6 +258,21 @@ export default function AnalyticsPage() {
                     <div 
                       className="bg-green-500 h-2 rounded-full transition-all duration-500"
                       style={{ width: analytics.totalLeads > 0 ? `${(analytics.websites / analytics.totalLeads) * 100}%` : '0%' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-600">Exported to Close CRM</span>
+                    <span className="text-gray-900 font-semibold">
+                      {analytics.exportedToClose} leads
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-orange-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: analytics.totalLeads > 0 ? `${(analytics.exportedToClose / analytics.totalLeads) * 100}%` : '0%' }}
                     />
                   </div>
                 </div>
