@@ -353,9 +353,9 @@ export default function LeadsPage() {
                 </div>
                 
                 {/* Filters and controls bar */}
-                <div className="flex items-center justify-between gap-3 mt-2">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-2">
                   {/* Left side: Collapsed header indicator + Filters */}
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
                     {/* Lead count - only visible when collapsed */}
                     <div className={`flex items-center gap-2 transition-all duration-300 ${
                       isHeaderCollapsed ? 'opacity-100' : 'opacity-0 w-0 overflow-hidden'
@@ -373,7 +373,7 @@ export default function LeadsPage() {
                   </div>
                   
                   {/* Right side: View controls */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 ml-auto">
                       {/* Column visibility dropdown */}
                       <Menu as="div" className="relative inline-block text-left">
                       <div>

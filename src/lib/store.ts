@@ -44,6 +44,12 @@ interface LeadStore {
   setOpenAIApiKey: (key: string) => void;
   setViewMode: (mode: 'table' | 'grid') => void;
   setViewDensity: (density: 'compact' | 'expanded') => void;
+  
+  // Sorting
+  sortBy: keyof Lead | null;
+  sortDirection: 'asc' | 'desc';
+  setSortBy: (field: keyof Lead | null) => void;
+  setSortDirection: (direction: 'asc' | 'desc') => void;
 }
 
 export const useLeadStore = create<LeadStore>((set) => ({
@@ -161,4 +167,10 @@ export const useLeadStore = create<LeadStore>((set) => ({
     }
     set({ viewDensity: density });
   },
+  
+  // Sorting
+  sortBy: null,
+  sortDirection: 'asc',
+  setSortBy: (field) => set({ sortBy: field }),
+  setSortDirection: (direction) => set({ sortDirection: direction }),
 }))

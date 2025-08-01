@@ -1,18 +1,25 @@
-import { useState, Fragment } from 'react';
+import { useState, Fragment, useRef, useEffect } from 'react';
 import { useLeadStore } from '@/lib/store';
 import { Lead } from '@/types';
 import { CheckIcon, TrashIcon, PencilSquareIcon, GlobeAltIcon, EyeIcon, EyeSlashIcon, EllipsisVerticalIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
-import { deleteLead as deleteLeadAPI, deleteLeads as deleteLeadsAPI } from '@/lib/api';
+import { deleteLead as deleteLeadAPI, deleteLeads as deleteLeadsAPI, updateLead as updateLeadAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
 import EditLeadModal from './modals/EditLeadModal';
 import BulkEditModal from './modals/BulkEditModal';
 import AdPlatformModal from './modals/AdPlatformModal';
 import AdViewerModal from './modals/AdViewerModal';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useTableKeyboardNavigation } from '@/hooks/useTableKeyboardNavigation';
 import { getCategoryForBusiness } from '@/utils/grey-tsunami-business-types';
 import AdPlatformChecker from './AdPlatformChecker';
 import { ensureProtocol } from '@/utils/csv-parser';
 import { Menu, Transition } from '@headlessui/react';
+import InlineEditableCell from './InlineEditableCell';
+import BulkOperationsBar from './BulkOperationsBar';
+import CommandPalette from './CommandPalette';
+import ResizableColumn from './ResizableColumn';
+import MobileLeadCard from './MobileLeadCard';
+import useMediaQuery from '@/hooks/useMediaQuery';
 
 interface LeadTableProps {
   visibleColumns: {
@@ -55,12 +62,17 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
     leads, 
     sourceFilter, 
     deleteLead, 
+    updateLead,
     selectedLeads: storeSelectedLeads, 
     setSelectedLeads,
     cityFilter,
     serviceTypeFilter,
-    viewDensity
+    viewDensity,
+    viewMode
   } = useLeadStore();
+  
+  // Check if we're on mobile
+  const isMobile = useMediaQuery('(max-width: 768px)');
   
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -93,6 +105,9 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
   const [adPlatformLeadId, setAdPlatformLeadId] = useState<string | null>(null);
   const [showAdViewerModal, setShowAdViewerModal] = useState(false);
   const [adViewerLead, setAdViewerLead] = useState<Lead | null>(null);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const { focusedCell, isEditing } = useTableKeyboardNavigation(tableRef);
 
 
   const handleSort = (field: string) => {
@@ -213,6 +228,19 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
     setShowEditModal(true);
   };
 
+  // Command palette shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowCommandPalette(true);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Keyboard shortcuts
   useKeyboardShortcuts([
     {
@@ -249,11 +277,113 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
     }
   ]);
 
+  // Mobile card view
+  if (isMobile && viewMode === 'grid') {
+    return (
+      <>
+        <div className="bg-gray-50 min-h-screen">
+          {/* Bulk operations bar for mobile */}
+          <BulkOperationsBar
+            selectedCount={storeSelectedLeads.length}
+            onBulkEdit={() => setShowBulkEditModal(true)}
+            onExport={() => {}}
+            onCheckPlatforms={() => setShowAdPlatformModal(true)}
+            onClearSelection={() => setSelectedLeads([])}
+          />
+          
+          {/* Mobile cards */}
+          <div className="px-4 py-4">
+            {storeSelectedLeads.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 mb-4 flex items-center justify-between">
+                <span className="text-sm text-blue-700">
+                  {storeSelectedLeads.length} selected
+                </span>
+                <button
+                  onClick={() => setSelectedLeads([])}
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+            
+            {sortedLeads.map((lead) => (
+              <MobileLeadCard
+                key={lead.id}
+                lead={lead}
+                selected={storeSelectedLeads.includes(lead.id)}
+                onToggleSelect={() => toggleSelect(lead.id)}
+                onEdit={() => handleEditLead(lead)}
+                onDelete={() => handleDeleteSingle(lead.id)}
+                onCheckPlatforms={setAdPlatformLeadId}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Modals */}
+        <EditLeadModal 
+          open={showEditModal} 
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingLead(null);
+          }} 
+          lead={editingLead} 
+        />
+
+        <BulkEditModal 
+          open={showBulkEditModal}
+          onClose={() => {
+            setShowBulkEditModal(false);
+            setSelectedLeads([]);
+          }}
+          selectedLeadIds={storeSelectedLeads}
+        />
+        
+        <AdPlatformModal
+          open={showAdPlatformModal}
+          onClose={() => {
+            setShowAdPlatformModal(false);
+            setAdPlatformLeadId(null);
+          }}
+          selectedLeadIds={adPlatformLeadId ? [adPlatformLeadId] : []}
+        />
+        
+        <AdViewerModal
+          open={showAdViewerModal}
+          onClose={() => {
+            setShowAdViewerModal(false);
+            setAdViewerLead(null);
+          }}
+          lead={adViewerLead}
+        />
+        
+        <CommandPalette
+          isOpen={showCommandPalette}
+          onClose={() => setShowCommandPalette(false)}
+          onAddLead={() => {}}
+          onBulkEdit={() => setShowBulkEditModal(true)}
+          onExport={() => {}}
+          onCheckPlatforms={() => setShowAdPlatformModal(true)}
+        />
+      </>
+    );
+  }
+
+  // Table view (Desktop and Mobile when selected)
   return (
     <>
-      <div className="bg-white shadow-sm relative z-0 overflow-hidden">
+      <div className={`bg-white shadow-sm relative z-0 overflow-hidden ${isMobile ? 'mobile-table' : ''}`}>
+        {/* Bulk operations bar */}
+        <BulkOperationsBar
+          selectedCount={storeSelectedLeads.length}
+          onBulkEdit={() => setShowBulkEditModal(true)}
+          onExport={() => {}}
+          onCheckPlatforms={() => setShowAdPlatformModal(true)}
+          onClearSelection={() => setSelectedLeads([])}
+        />
         
-        {storeSelectedLeads.length > 0 && (
+        {storeSelectedLeads.length > 0 && false && (
           <div className="bg-gray-50 px-3 py-2 flex items-center justify-between">
             <span className="text-xs text-gray-700">
               {storeSelectedLeads.length} lead{storeSelectedLeads.length !== 1 ? 's' : ''} selected
@@ -281,10 +411,10 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
         )}
         
         <div className="overflow-x-auto overflow-y-auto relative" style={{ height: 'calc(100vh - 120px)' }}>
-          <table className="w-full divide-y divide-gray-200">
+          <table ref={tableRef} className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50 sticky top-0 z-50 shadow-sm">
               <tr>
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide sticky left-0 z-10 bg-gray-50 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200">
+                <th className="px-2 sm:px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide sticky left-0 z-10 bg-gray-50 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 min-w-[44px]">
                   <input
                     type="checkbox"
                     checked={storeSelectedLeads.length === sortedLeads.length && sortedLeads.length > 0}
@@ -298,11 +428,13 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                   </th>
                 )}
                 {activeColumns.company && (
-                  <th 
-                    className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 sticky left-[52px] z-10 bg-gray-50 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200"
-                    onClick={() => handleSort('company_name')}
+                  <ResizableColumn
+                    className={`px-2 sm:px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 sticky z-10 bg-gray-50 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 min-w-[150px]`}
+                    minWidth={150}
+                    maxWidth={400}
+                    style={{ left: '44px' }}
                   >
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1" onClick={() => handleSort('company_name')}>
                       Company
                       {sortField === 'company_name' && (
                         sortDirection === 'asc' ? 
@@ -310,11 +442,11 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                           <ChevronDownIcon className="h-3 w-3" />
                       )}
                     </div>
-                  </th>
+                  </ResizableColumn>
                 )}
                 {activeColumns.type && (
                   <th 
-                    className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100"
+                    className={`px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 ${!activeColumns.handle ? 'pl-6' : ''}`}
                     onClick={() => handleSort('service_type')}
                   >
                     <div className="flex items-center gap-1">
@@ -353,17 +485,17 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                   </th>
                 )}
                 {activeColumns.rating && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className={`px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide ${isMobile ? 'hide-on-mobile' : ''}`}>
                     Rating
                   </th>
                 )}
                 {activeColumns.links && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className={`px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide ${isMobile ? 'hide-on-mobile' : ''}`}>
                     Links
                   </th>
                 )}
                 {activeColumns.source && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className={`px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide ${isMobile ? 'hide-on-mobile' : ''}`}>
                     Source
                   </th>
                 )}
@@ -413,6 +545,7 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                     setAdViewerLead(lead);
                     setShowAdViewerModal(true);
                   }}
+                  isMobile={isMobile}
                 />
               ))}
             </tbody>
@@ -455,6 +588,15 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
         }}
         lead={adViewerLead}
       />
+      
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        onAddLead={() => {}}
+        onBulkEdit={() => setShowBulkEditModal(true)}
+        onExport={() => {}}
+        onCheckPlatforms={() => setShowAdPlatformModal(true)}
+      />
     </>
   );
 }
@@ -484,9 +626,11 @@ interface LeadRowProps {
   onEdit: () => void;
   onCheckPlatforms: (leadId: string) => void;
   onViewAds: (lead: Lead) => void;
+  isMobile?: boolean;
 }
 
-function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelete, onEdit, onCheckPlatforms, onViewAds }: LeadRowProps) {
+function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelete, onEdit, onCheckPlatforms, onViewAds, isMobile = false }: LeadRowProps) {
+  const { updateLead } = useLeadStore();
   // Check for multi-source presence
   const hasMultipleSources = 
     (lead.lead_source === 'Google Maps' && lead.running_ads) ||
@@ -550,7 +694,7 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
       hover:bg-blue-50 hover:shadow-sm
       ${selected ? 'bg-blue-100 hover:bg-blue-200' : ''}
     `}>
-      <td className={`px-3 py-2 whitespace-nowrap sticky left-0 z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 transition-colors duration-150
+      <td className={`px-2 sm:px-3 py-2 whitespace-nowrap sticky left-0 z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 transition-colors duration-150 min-w-[44px]
         ${selected ? 'bg-blue-100' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
         group-hover:bg-blue-50 ${selected ? 'group-hover:bg-blue-200' : ''}
       `}>
@@ -563,22 +707,29 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
         />
       </td>
       {activeColumns.handle && (
-        <td className="px-3 py-2 text-xs text-gray-900 cursor-pointer" onClick={onEdit}>
-          <div className="max-w-[200px] truncate" title={lead.handle || undefined}>
-            {lead.handle || '-'}
-          </div>
+        <td className="px-3 py-2 text-xs text-gray-900">
+          <InlineEditableCell
+            lead={lead}
+            field="handle"
+            value={lead.handle}
+            onUpdate={updateLead}
+            className="max-w-[200px] truncate"
+            placeholder="Add handle..."
+          />
         </td>
       )}
       {activeColumns.company && (
-        <td className={`px-3 py-2 cursor-pointer sticky left-[52px] z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 transition-colors duration-150
+        <td className={`px-2 sm:px-3 py-2 cursor-pointer sticky z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 transition-colors duration-150 min-w-[150px]
           ${selected ? 'bg-blue-100' : hasMultipleSources ? 'bg-gradient-to-r from-blue-50 to-purple-50' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
           group-hover:bg-blue-50 ${selected ? 'group-hover:bg-blue-200' : ''}
-        `} onClick={onEdit}>
+        `} 
+        style={{ left: '44px' }}
+        onClick={onEdit}>
           {getCompanyDisplay()}
         </td>
       )}
       {activeColumns.type && (
-        <td className="px-3 py-2 text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
+        <td className={`px-3 py-2 text-xs text-gray-500 cursor-pointer ${!activeColumns.handle ? 'pl-6' : ''}`} onClick={onEdit}>
           <div className="relative group max-w-[180px]">
             <span className="truncate block" title={lead.service_type || undefined}>
               {lead.service_type}
@@ -602,28 +753,32 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
         </td>
       )}
       {activeColumns.phone && (
-        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
-          {lead.phone || <span className="text-gray-400 italic text-xs">No phone</span>}
+        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
+          <InlineEditableCell
+            lead={lead}
+            field="phone"
+            value={lead.phone}
+            onUpdate={updateLead}
+            type="tel"
+            placeholder="Add phone..."
+          />
         </td>
       )}
       {activeColumns.email && (
-        <td className="px-3 py-2 text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
-          {lead.email ? (
-            <div className="max-w-[220px]">
-              <a href={`mailto:${lead.email}`} 
-                 className="text-blue-600 hover:text-blue-800 truncate block" 
-                 title={lead.email}
-                 onClick={(e) => e.stopPropagation()}>
-                {lead.email}
-              </a>
-              {(lead.email2 || lead.email3) && (
-                <span className="text-gray-400 text-xs">
-                  +{[lead.email2, lead.email3].filter(Boolean).length} more
-                </span>
-              )}
-            </div>
-          ) : (
-            <span className="text-gray-400 italic text-xs">No email</span>
+        <td className="px-3 py-2 text-xs text-gray-500">
+          <InlineEditableCell
+            lead={lead}
+            field="email"
+            value={lead.email}
+            onUpdate={updateLead}
+            type="email"
+            className="max-w-[220px]"
+            placeholder="Add email..."
+          />
+          {(lead.email2 || lead.email3) && (
+            <span className="text-gray-400 text-xs ml-1">
+              +{[lead.email2, lead.email3].filter(Boolean).length} more
+            </span>
           )}
         </td>
       )}
@@ -679,7 +834,7 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
         </td>
       )}
       {activeColumns.source && (
-        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
+        <td className={`px-3 py-2 whitespace-nowrap text-xs text-gray-500 cursor-pointer ${isMobile ? 'hide-on-mobile' : ''}`} onClick={onEdit}>
           {getSourceBadge()}
         </td>
       )}
@@ -699,10 +854,15 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
         </td>
       )}
       {activeColumns.notes && (
-        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
-          <div className="max-w-[200px] truncate" title={lead.notes || undefined}>
-            {lead.notes || <span className="text-gray-400 italic text-xs">No notes</span>}
-          </div>
+        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
+          <InlineEditableCell
+            lead={lead}
+            field="notes"
+            value={lead.notes}
+            onUpdate={updateLead}
+            className="max-w-[200px] truncate"
+            placeholder="Add notes..."
+          />
         </td>
       )}
       {activeColumns.close && (
