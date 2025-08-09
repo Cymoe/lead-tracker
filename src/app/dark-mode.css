@@ -1,80 +1,89 @@
 /* Dark Mode Styles */
 
-/* Background colors */
+/* Background colors - Pure Black Theme (like loading screen) */
 .dark .bg-white {
-  background-color: rgb(31 41 55); /* gray-800 */
+  background-color: rgb(0 0 0); /* pure black - main background */
 }
 
 .dark .bg-gray-50 {
-  background-color: rgb(17 24 39); /* gray-900 */
+  background-color: rgb(0 0 0); /* pure black - main background */
 }
 
 .dark .bg-gray-100 {
-  background-color: rgb(31 41 55); /* gray-800 */
+  background-color: rgb(0 0 0 / 0.8); /* pure black with slight transparency */
 }
 
 .dark .bg-gray-200 {
-  background-color: rgb(55 65 81); /* gray-700 */
+  background-color: rgb(255 255 255 / 0.05); /* white with 5% opacity for subtle elevation */
 }
 
-/* Text colors */
+/* Text colors - Match Loading Screen */
 .dark .text-gray-900 {
-  color: rgb(243 244 246); /* gray-100 */
+  color: rgb(255 255 255 / 0.9); /* white with 90% opacity - like text-white/90 */
 }
 
 .dark .text-gray-800 {
-  color: rgb(229 231 235); /* gray-200 */
+  color: rgb(255 255 255 / 0.8); /* white with 80% opacity */
 }
 
 .dark .text-gray-700 {
-  color: rgb(209 213 219); /* gray-300 */
+  color: rgb(255 255 255 / 0.7); /* white with 70% opacity */
 }
 
 .dark .text-gray-600 {
-  color: rgb(156 163 175); /* gray-400 */
+  color: rgb(255 255 255 / 0.6); /* white with 60% opacity */
 }
 
 .dark .text-gray-500 {
-  color: rgb(156 163 175); /* gray-400 */
+  color: rgb(255 255 255 / 0.5); /* white with 50% opacity */
 }
 
 .dark .text-gray-400 {
-  color: rgb(107 114 128); /* gray-500 */
+  color: rgb(255 255 255 / 0.4); /* white with 40% opacity - like text-white/40 */
 }
 
-/* Border colors */
+/* Border colors - Match Loading Screen */
 .dark .border-gray-200 {
-  border-color: rgb(55 65 81); /* gray-700 */
+  border-color: rgb(255 255 255 / 0.1); /* white with 10% opacity - like bg-white/10 */
 }
 
 .dark .border-gray-300 {
-  border-color: rgb(75 85 99); /* gray-600 */
+  border-color: rgb(255 255 255 / 0.2); /* white with 20% opacity - like bg-white/20 */
 }
 
 .dark .border-blue-200 {
-  border-color: rgb(37 99 235); /* blue-600 */
+  border-color: rgb(255 255 255 / 0.3); /* white with 30% opacity for accents */
 }
 
 /* Divide colors */
 .dark .divide-gray-200 > * + * {
-  border-color: rgb(55 65 81); /* gray-700 */
+  border-color: rgb(255 255 255 / 0.1); /* white with 10% opacity */
 }
 
 .dark .divide-gray-100 > * + * {
-  border-color: rgb(31 41 55); /* gray-800 */
+  border-color: rgb(255 255 255 / 0.05); /* white with 5% opacity */
 }
 
-/* Hover states */
+/* Fix table divide styling */
+.dark table.divide-y tbody tr {
+  border-top-color: rgb(255 255 255 / 0.1) !important;
+}
+
+/* Hover states - Match Loading Screen */
 .dark .hover\:bg-gray-50:hover {
-  background-color: rgb(55 65 81); /* gray-700 */
+  background-color: rgb(255 255 255 / 0.05); /* white with 5% opacity hover */
 }
 
 .dark .hover\:bg-gray-100:hover {
-  background-color: rgb(55 65 81); /* gray-700 */
+  background-color: rgb(255 255 255 / 0.1); /* white with 10% opacity hover */
 }
 
 .dark .hover\:bg-gray-200:hover {
-  background-color: rgb(75 85 99); /* gray-600 */
+  background-color: rgb(255 255 255 / 0.15); /* white with 15% opacity hover */
+}
+
+.dark .hover\:bg-blue-50:hover {
+  background-color: rgb(255 255 255 / 0.05) !important; /* subtle white hover */
 }
 
 /* Ring colors */
@@ -95,53 +104,316 @@
   --tw-shadow-color: rgb(0 0 0 / 0.4);
 }
 
-/* Table specific */
+/* Table specific - Pure Black Theme */
 .dark table thead th {
-  background-color: rgb(55 65 81); /* gray-700 */
-  color: rgb(209 213 219); /* gray-300 */
+  background-color: rgb(0 0 0); /* pure black - matches body */
+  color: rgb(255 255 255 / 0.9); /* white/90 */
+  border-color: rgb(255 255 255 / 0.1); /* white/10 border */
+}
+
+.dark table tbody {
+  background-color: rgb(0 0 0) !important; /* pure black */
+}
+
+.dark tbody.bg-white {
+  background-color: rgb(0 0 0) !important; /* pure black */
+}
+
+.dark table tbody tr {
+  background-color: rgb(0 0 0) !important; /* pure black */
 }
 
 .dark table tbody tr:hover {
-  background-color: rgb(55 65 81); /* gray-700 */
+  background-color: rgb(255 255 255 / 0.05) !important; /* white/5 hover */
 }
 
 .dark table tbody td {
-  color: rgb(209 213 219); /* gray-300 */
+  color: rgb(255 255 255 / 0.8); /* white/80 */
+  border-color: rgb(255 255 255 / 0.1); /* white/10 border */
 }
 
-/* Sidebar specific */
+/* Remove alternating row colors in dark mode */
+.dark .bg-gray-50\/50 {
+  background-color: rgb(0 0 0) !important; /* pure black */
+}
+
+/* Fix background inheritance issues */
+.dark tbody .bg-white {
+  background-color: rgb(0 0 0) !important;
+}
+
+.dark tbody .bg-gray-50 {
+  background-color: rgb(0 0 0) !important;
+}
+
+/* Selected rows - Subtle white accent */
+.dark tr.bg-blue-100 {
+  background-color: rgb(255 255 255 / 0.1) !important; /* white/10 selection background */
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.2); /* white/20 accent border */
+}
+
+.dark tr.bg-blue-100:hover {
+  background-color: rgb(255 255 255 / 0.15) !important; /* white/15 hover */
+}
+
+/* Multi-source rows - Subtle white gradient */
+.dark tr.bg-gradient-to-r {
+  background: linear-gradient(90deg, rgb(0 0 0), rgb(255 255 255 / 0.05)) !important; /* very subtle white gradient */
+}
+
+/* Multi-source individual cells - Fix white background issue */
+.dark td.bg-gradient-to-r {
+  background: linear-gradient(90deg, rgb(0 0 0), rgb(255 255 255 / 0.05)) !important; /* very subtle white gradient */
+}
+
+/* Gradient color fixes for dark mode */
+.dark .from-blue-50 {
+  --tw-gradient-from: rgb(17 24 39) !important;
+}
+
+.dark .to-purple-50 {
+  --tw-gradient-to: rgb(59 130 246 / 0.05) !important;
+}
+
+.dark .from-blue-100 {
+  --tw-gradient-from: rgb(31 41 55) !important;
+}
+
+.dark .to-purple-100 {
+  --tw-gradient-to: rgb(59 130 246 / 0.08) !important;
+}
+
+.dark .from-blue-50\/30 {
+  --tw-gradient-from: rgb(17 24 39 / 0.3) !important;
+}
+
+.dark .to-purple-50\/30 {
+  --tw-gradient-to: rgb(59 130 246 / 0.05) !important;
+}
+
+.dark .to-indigo-50 {
+  --tw-gradient-to: rgb(59 130 246 / 0.05) !important;
+}
+
+.dark .to-indigo-100 {
+  --tw-gradient-to: rgb(59 130 246 / 0.08) !important;
+}
+
+/* Newly imported rows - Subtle success highlight */
+.dark tr.newly-imported {
+  background-color: rgb(16 185 129 / 0.08) !important; /* very subtle green tint */
+  box-shadow: inset 0 0 0 1px rgb(16 185 129 / 0.3); /* green border */
+}
+
+.dark .bg-green-50\/70 {
+  background-color: rgb(16 185 129 / 0.08) !important; /* very subtle green tint */
+}
+
+.dark .ring-green-400 {
+  --tw-ring-color: rgb(16 185 129); /* emerald-500 */
+}
+
+/* Sticky columns background */
+.dark td.sticky {
+  background-color: inherit !important;
+}
+
+.dark tr:hover td.sticky {
+  background-color: rgb(255 255 255 / 0.05) !important; /* match row hover */
+}
+
+.dark tr.bg-blue-100 td.sticky {
+  background-color: rgb(255 255 255 / 0.1) !important; /* match selected row */
+}
+
+/* Sidebar specific - Pure Black Theme */
 .dark .bg-gray-900 {
-  background-color: rgb(3 7 18); /* gray-950 */
+  background-color: rgb(0 0 0); /* pure black sidebar */
 }
 
 .dark .border-gray-800 {
-  border-color: rgb(55 65 81); /* gray-700 */
+  border-color: rgb(255 255 255 / 0.1); /* white/10 border */
 }
 
 .dark .hover\:bg-gray-800:hover {
-  background-color: rgb(55 65 81); /* gray-700 */
+  background-color: rgb(255 255 255 / 0.05); /* white/5 hover */
 }
 
-/* Modal backgrounds */
+/* Modal backgrounds - Pure Black Theme */
 .dark .bg-white.shadow-xl {
-  background-color: rgb(31 41 55); /* gray-800 */
+  background-color: rgb(0 0 0); /* pure black modal */
 }
 
-/* Custom scrollbar for dark mode */
+/* Select dropdowns - Pure Black Theme */
+.dark select.bg-gray-700 {
+  background-color: rgb(255 255 255 / 0.05) !important; /* white/5 background */
+  color: rgb(255 255 255 / 0.9) !important; /* white/90 text */
+}
+
+.dark select.bg-gray-700:hover {
+  background-color: rgb(255 255 255 / 0.1) !important; /* white/10 on hover */
+}
+
+.dark select.bg-gray-700 option {
+  background-color: rgb(0 0 0) !important; /* pure black dropdown */
+  color: rgb(255 255 255 / 0.9) !important;
+}
+
+/* Source badges in dark mode */
+.dark .bg-blue-100 {
+  background-color: rgb(30 64 175 / 0.2); /* blue-800 with opacity */
+}
+
+.dark .text-blue-800 {
+  color: rgb(147 197 253); /* blue-300 */
+}
+
+.dark .border-blue-200 {
+  border-color: rgb(59 130 246 / 0.5); /* blue-500 with opacity */
+}
+
+.dark .bg-indigo-100 {
+  background-color: rgb(67 56 202 / 0.2); /* indigo-700 with opacity */
+}
+
+.dark .text-indigo-800 {
+  color: rgb(165 180 252); /* indigo-300 */
+}
+
+.dark .border-indigo-200 {
+  border-color: rgb(99 102 241 / 0.5); /* indigo-500 with opacity */
+}
+
+.dark .bg-purple-100 {
+  background-color: rgb(91 33 182 / 0.2); /* purple-800 with opacity */
+}
+
+.dark .text-purple-800 {
+  color: rgb(196 181 253); /* purple-300 */
+}
+
+.dark .border-purple-200 {
+  border-color: rgb(147 51 234 / 0.5); /* purple-500 with opacity */
+}
+
+/* Gradient backgrounds are handled by specific row types */
+
+/* Hover text color fixes - make text lighter on hover in dark mode instead of darker */
+.dark .hover\:text-gray-600:hover {
+  color: rgb(229 231 235) !important; /* gray-200 - lighter on hover */
+}
+
+.dark .hover\:text-gray-700:hover {
+  color: rgb(243 244 246) !important; /* gray-100 - even lighter */
+}
+
+.dark .hover\:text-gray-900:hover {
+  color: rgb(255 255 255) !important; /* white - brightest */
+}
+
+.dark .hover\:text-gray-500:hover {
+  color: rgb(209 213 219) !important; /* gray-300 - lighter */
+}
+
+.dark .group-hover\:text-gray-500:hover {
+  color: rgb(209 213 219) !important; /* gray-300 - lighter */
+}
+
+.dark .group-hover\:text-gray-600:hover {
+  color: rgb(229 231 235) !important; /* gray-200 - lighter */
+}
+
+.dark .group-hover\:text-gray-700:hover {
+  color: rgb(243 244 246) !important; /* gray-100 - lighter */
+}
+
+.dark .group:hover .group-hover\:text-gray-500 {
+  color: rgb(209 213 219) !important; /* gray-300 - lighter */
+}
+
+.dark .group:hover .group-hover\:text-gray-600 {
+  color: rgb(229 231 235) !important; /* gray-200 - lighter */
+}
+
+.dark .group:hover .group-hover\:text-gray-700 {
+  color: rgb(243 244 246) !important; /* gray-100 - lighter */
+}
+
+.dark .group:hover .group-hover\:text-white {
+  color: rgb(255 255 255) !important; /* white */
+}
+
+/* Blue text hover fixes - keep blue links readable in dark mode */
+.dark .hover\:text-blue-700:hover {
+  color: rgb(147 197 253) !important; /* blue-300 - lighter blue */
+}
+
+.dark .hover\:text-blue-800:hover {
+  color: rgb(147 197 253) !important; /* blue-300 - lighter blue */
+}
+
+.dark .hover\:text-blue-900:hover {
+  color: rgb(147 197 253) !important; /* blue-300 - lighter blue */
+}
+
+/* Other color hover fixes - keep all colored links readable in dark mode */
+.dark .hover\:text-red-900:hover {
+  color: rgb(252 165 165) !important; /* red-300 - lighter red */
+}
+
+.dark .hover\:text-pink-800:hover {
+  color: rgb(244 114 182) !important; /* pink-400 - lighter pink */
+}
+
+.dark .hover\:text-green-800:hover {
+  color: rgb(134 239 172) !important; /* green-300 - lighter green */
+}
+
+/* Blue button overrides for dark mode - Pure Black Theme */
+.dark .bg-blue-600 {
+  background-color: rgb(255 255 255 / 0.9) !important; /* white/90 for active buttons */
+  color: rgb(0 0 0) !important; /* black text on white buttons */
+}
+
+.dark .border-blue-700 {
+  border-color: rgb(255 255 255 / 0.9) !important; /* white/90 border */
+}
+
+.dark .bg-blue-500 {
+  background-color: rgb(255 255 255 / 0.8) !important; /* white/80 */
+  color: rgb(0 0 0) !important;
+}
+
+.dark .hover\:bg-blue-700:hover {
+  background-color: rgb(255 255 255) !important; /* full white on hover */
+  color: rgb(0 0 0) !important;
+}
+
+.dark .hover\:bg-blue-600:hover {
+  background-color: rgb(255 255 255) !important; /* full white on hover */
+  color: rgb(0 0 0) !important;
+}
+
+.dark .hover\:bg-blue-500:hover {
+  background-color: rgb(255 255 255 / 0.9) !important; /* white/90 on hover */
+  color: rgb(0 0 0) !important;
+}
+
+/* Custom scrollbar for dark mode - Pure Black Theme */
 .dark::-webkit-scrollbar {
   width: 0.5rem;
   height: 0.5rem;
 }
 
 .dark::-webkit-scrollbar-track {
-  background-color: rgb(31 41 55); /* gray-800 */
+  background-color: rgb(0 0 0); /* pure black */
 }
 
 .dark::-webkit-scrollbar-thumb {
-  background-color: rgb(75 85 99); /* gray-600 */
+  background-color: rgb(255 255 255 / 0.2); /* white/20 */
   border-radius: 0.25rem;
 }
 
 .dark::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(107 114 128); /* gray-500 */
+  background-color: rgb(255 255 255 / 0.3); /* white/30 on hover */
 }

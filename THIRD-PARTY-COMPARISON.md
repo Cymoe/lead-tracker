@@ -1,3 +1,4 @@
+
 # 🔍 Third-Party Ad Scraping Services Comparison
 
 ## Quick Comparison Table
@@ -20,6 +21,7 @@
 - JavaScript/Node.js friendly
 - Handles anti-bot measures
 - Can run on schedule
+
 
 **Cons:**
 - Can be slow (10-30s per scrape)

@@ -246,19 +246,19 @@ export default function USCityAutocomplete({
       
       {showDropdown && (
         <div 
-          className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-96 overflow-auto"
+          className="absolute z-50 w-full mt-1 bg-white dark:bg-[#1F2937] border border-gray-300 dark:border-[#374151] rounded-md shadow-lg max-h-96 overflow-auto"
           onMouseEnter={() => setIsInteractingWithDropdown(true)}
           onMouseLeave={() => setIsInteractingWithDropdown(false)}>
           {/* State Selection Mode */}
           {displayMode === 'states' && (
             <>
-              <div className="px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-b sticky top-0">
+              <div className="px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-[#374151] border-b dark:border-[#4B5563] sticky top-0">
                 🏙️ Select a State
               </div>
               {US_STATES.map((state) => (
                 <div
                   key={state.code}
-                  className="px-3 py-2 cursor-pointer hover:bg-blue-50 flex items-center justify-between group"
+                  className="px-3 py-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-[#374151] flex items-center justify-between group"
                   onClick={async () => {
                     setSelectedState(state.code);
                     setDisplayMode('cities');
@@ -273,8 +273,8 @@ export default function USCityAutocomplete({
                     setLoading(false);
                   }}
                 >
-                  <span className="font-medium">{state.name}</span>
-                  <span className="text-gray-400 text-sm group-hover:text-gray-600">
+                  <span className="font-medium dark:text-white">{state.name}</span>
+                  <span className="text-gray-400 dark:text-gray-500 text-sm group-hover:text-gray-600 dark:group-hover:text-gray-400">
                     {state.code} • {stateStats.get(state.code) || 0} cities
                   </span>
                 </div>
@@ -285,9 +285,9 @@ export default function USCityAutocomplete({
           {/* City Selection Mode (after state selection) */}
           {displayMode === 'cities' && selectedState && (
             <>
-              <div className="px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border-b sticky top-0 flex items-center justify-between">
+              <div className="px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-[#374151] border-b dark:border-[#4B5563] sticky top-0 flex items-center justify-between">
                 <button
-                  className="text-blue-600 hover:text-blue-800 flex items-center"
+                  className="text-blue-600 dark:text-[#3B82F6] hover:text-blue-800 dark:hover:text-[#60A5FA] flex items-center"
                   onClick={(e) => {
                     e.stopPropagation();
                     setDisplayMode('states');
@@ -299,7 +299,7 @@ export default function USCityAutocomplete({
                 <span>{US_STATES.find(s => s.code === selectedState)?.name} Cities</span>
               </div>
               {loading ? (
-                <div className="px-3 py-4 text-center text-gray-500">
+                <div className="px-3 py-4 text-center text-gray-500 dark:text-gray-400">
                   Loading cities...
                 </div>
               ) : (
@@ -311,8 +311,8 @@ export default function USCityAutocomplete({
                       ref={isSelected ? selectedCityRef : null}
                       className={`px-3 py-2 cursor-pointer ${
                         isSelected 
-                          ? 'bg-blue-100 text-blue-900 font-medium' 
-                          : 'hover:bg-gray-100'
+                          ? 'bg-blue-100 dark:bg-[#3B82F6] dark:bg-opacity-20 text-blue-900 dark:text-[#60A5FA] font-medium' 
+                          : 'hover:bg-gray-100 dark:hover:bg-[#374151] dark:text-gray-300'
                       }`}
                       onClick={() => handleSelectCity(city)}
                     >
@@ -337,14 +337,14 @@ export default function USCityAutocomplete({
               {/* Search Results */}
                 <>
                   {loading ? (
-                    <div className="px-3 py-4 text-center text-gray-500">
+                    <div className="px-3 py-4 text-center text-gray-500 dark:text-gray-400">
                       Searching cities...
                     </div>
                   ) : filteredCities.length > 0 ? (
                     filteredCities.map((city, index) => (
                       <div
                         key={`${city.stateCode}-${city.name}-${index}`}
-                        className="px-3 py-2 cursor-pointer hover:bg-gray-100 flex justify-between items-center"
+                        className="px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-[#374151] flex justify-between items-center dark:text-gray-300"
                         onClick={() => handleSelectCity(city)}
                       >
                         <span>{city.displayName}</span>
@@ -356,7 +356,7 @@ export default function USCityAutocomplete({
                       </div>
                     ))
                   ) : (
-                    <div className="px-3 py-2 text-gray-500">
+                    <div className="px-3 py-2 text-gray-500 dark:text-gray-400">
                       No cities found matching "{searchTerm}"
                     </div>
                   )}

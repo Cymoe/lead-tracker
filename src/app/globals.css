@@ -3,6 +3,54 @@
 @tailwind utilities;
 @import './dark-mode.css';
 
+/* Animation for newly imported leads */
+@keyframes subtlePulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.002);
+  }
+}
+
+@keyframes highlightBorder {
+  0%, 100% {
+    border-color: rgb(34 197 94);
+  }
+  50% {
+    border-color: rgb(74 222 128);
+  }
+}
+
+.newly-imported {
+  animation: subtlePulse 2s ease-in-out infinite;
+  border-left: 4px solid rgb(34 197 94);
+  animation: highlightBorder 2s ease-in-out infinite;
+}
+
+@keyframes flashHighlight {
+  0% {
+    background-color: rgb(74 222 128 / 0.3);
+  }
+  50% {
+    background-color: rgb(34 197 94 / 0.5);
+  }
+  100% {
+    background-color: rgb(74 222 128 / 0.3);
+  }
+}
+
+.flash-highlight {
+  animation: flashHighlight 0.5s ease-in-out 2;
+}
+
+/* Prevent layout shift on initial load */
+.sidebar-layout-stable {
+  visibility: visible !important;
+}
+
 @layer base {
   body {
     @apply bg-white dark:bg-gray-900;
@@ -25,7 +73,7 @@
   }
   
   .btn-primary {
-    @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
+    @apply bg-yellow-500 text-gray-900 hover:bg-yellow-600 focus:ring-yellow-500;
   }
   
   .btn-secondary {
@@ -68,7 +116,7 @@
   input[type="password"],
   textarea,
   select {
-    @apply px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500;
+    @apply px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500;
   }
 }
 

@@ -87,27 +87,26 @@ export default function ServiceTypeDropdown({
       
       {isOpen && (
         <div 
-          className="absolute z-[9999] left-0 mt-2 bg-white border border-gray-300 rounded-lg shadow-2xl overflow-y-auto"
-          style={{ width: 'min(700px, 90vw)', maxHeight: '32rem' }}
+          className="absolute z-[9999] left-0 right-0 mt-2 bg-white dark:bg-[#1F2937] border border-gray-300 dark:border-[#374151] rounded-lg shadow-2xl overflow-y-auto max-w-full"
+          style={{ maxHeight: '28rem' }}
         >
           {searchTerm ? (
             // Search results view
             <>
-              <div className="sticky top-0 bg-gray-50 px-4 py-3 text-sm text-gray-600 font-semibold border-b z-20">
-                {filteredBusinesses.length} businesses found - {filteredBusinesses.length > 0 && getCategoryForBusiness(filteredBusinesses[0]) ? 
-                  `Top match: ${getCategoryForBusiness(filteredBusinesses[0])?.tier}` : 'Custom'}
+              <div className="sticky top-0 bg-gray-50 dark:bg-[#374151] px-3 py-2 text-xs text-gray-600 dark:text-gray-300 font-medium border-b dark:border-[#4B5563] z-20">
+                {filteredBusinesses.length} results found
               </div>
               {filteredBusinesses.map((business, idx) => {
                 const category = getCategoryForBusiness(business);
                 return (
                   <div
                     key={idx}
-                    className="px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 transition-colors"
+                    className="px-3 py-2 hover:bg-blue-50 dark:hover:bg-[#374151] cursor-pointer border-b border-gray-100 dark:border-[#374151] transition-colors"
                     onClick={() => selectBusiness(business)}
                   >
-                    <div className="font-medium text-gray-900">{business}</div>
+                    <div className="font-medium text-gray-900 dark:text-white text-sm">{business}</div>
                     {category && (
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                         {category.tier} • {category.category} • Score: {category.acquisitionScore}/10
                       </div>
                     )}
@@ -116,7 +115,7 @@ export default function ServiceTypeDropdown({
               })}
               {searchTerm && filteredBusinesses.length === 0 && (
                 <div
-                  className="px-4 py-3 hover:bg-blue-50 cursor-pointer text-gray-600 italic transition-colors"
+                  className="px-3 py-2 hover:bg-blue-50 dark:hover:bg-[#374151] cursor-pointer text-gray-600 dark:text-gray-400 italic transition-colors text-sm"
                   onClick={() => selectBusiness(searchTerm)}
                 >
                   Use "{searchTerm}" as custom business type
@@ -126,36 +125,33 @@ export default function ServiceTypeDropdown({
           ) : (
             // Category view when no search
             <>
-              <div className="sticky top-0 bg-blue-50 px-4 py-4 border-b shadow-sm z-20">
-                <div className="text-base font-semibold text-blue-900">🎯 Grey Tsunami SMB Acquisition Targets</div>
-                <div className="text-sm text-blue-700 mt-1">680+ business types across 20 tiers organized by acquisition potential</div>
+              <div className="sticky top-0 bg-gray-50 dark:bg-[#374151] px-3 py-2 border-b dark:border-[#4B5563] z-20">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300">Select a business type</div>
               </div>
               {GREY_TSUNAMI_CATEGORIES.map((category, catIdx) => (
-                <div key={catIdx} className="border-b border-gray-200">
-                  <div className="px-4 py-4 bg-gray-50 sticky z-10" style={{ top: '80px' }}>
-                    <div className="flex flex-col space-y-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <span className="font-bold text-base text-gray-900">{category.tier}</span>
-                          <span className="ml-3 text-base text-gray-700">{category.category}</span>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-                          <span className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-medium whitespace-nowrap">
-                            Score: {category.acquisitionScore}/10
-                          </span>
-                          <span className="text-sm text-gray-500 whitespace-nowrap">
-                            {category.businesses.length} types
-                          </span>
-                        </div>
+                <div key={catIdx} className="border-b border-gray-200 dark:border-[#374151]">
+                  <div className="px-3 py-2 bg-gray-50 dark:bg-[#2D3748] sticky z-10" style={{ top: '32px' }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm text-gray-900 dark:text-white">{category.tier}</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-300">{category.category}</span>
                       </div>
-                      <div className="text-sm text-gray-600">{category.description}</div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs bg-blue-100 dark:bg-[#3B82F6] dark:bg-opacity-20 text-blue-800 dark:text-[#60A5FA] px-2 py-0.5 rounded font-medium">
+                          Score: {category.acquisitionScore}/10
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          {category.businesses.length} types
+                        </span>
+                      </div>
                     </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{category.description}</div>
                   </div>
                   <div className="grid grid-cols-1">
                     {category.businesses.map((business, bizIdx) => (
                       <div
                         key={`${catIdx}-${bizIdx}`}
-                        className="px-8 py-3 hover:bg-blue-50 cursor-pointer text-sm text-gray-800 transition-colors border-b border-gray-50"
+                        className="px-6 py-2 hover:bg-blue-50 dark:hover:bg-[#374151] cursor-pointer text-sm text-gray-800 dark:text-gray-300 transition-colors border-b border-gray-50 dark:border-[#2D3748]"
                         onClick={() => selectBusiness(business)}
                       >
                         {business}

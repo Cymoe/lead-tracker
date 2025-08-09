@@ -10,11 +10,13 @@ import {
   PencilSquareIcon,
   CheckIcon,
   DocumentArrowDownIcon,
-  GlobeAltIcon
+  ArrowUturnLeftIcon
 } from '@heroicons/react/24/outline';
 import { useLeadStore } from '@/lib/store';
 import { useRouter } from 'next/navigation';
 import { Lead } from '@/types';
+import { canUndoOperation } from '@/lib/import-operations-api';
+import toast from 'react-hot-toast';
 
 interface CommandItem {
   id: string;
@@ -32,7 +34,7 @@ interface CommandPaletteProps {
   onAddLead?: () => void;
   onBulkEdit?: () => void;
   onExport?: () => void;
-  onCheckPlatforms?: () => void;
+  onShowImportHistory?: () => void;
 }
 
 export default function CommandPalette({ 
@@ -41,7 +43,7 @@ export default function CommandPalette({
   onAddLead,
   onBulkEdit,
   onExport,
-  onCheckPlatforms
+  onShowImportHistory
 }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const router = useRouter();
@@ -53,7 +55,10 @@ export default function CommandPalette({
     setServiceTypeFilter,
     sortBy,
     setSortBy,
-    setSortDirection
+    setSortDirection,
+    lastImportOperation,
+    undoLastImport,
+    undoInProgress
   } = useLeadStore();
 
   // Extract unique cities and service types
@@ -135,16 +140,44 @@ export default function CommandPalette({
       keywords: ['export', 'download', 'csv', 'sheets']
     },
     {
-      id: 'check-platforms',
-      name: 'Check Ad Platforms',
-      icon: GlobeAltIcon,
+      id: 'import-history',
+      name: 'View Import History',
+      icon: CommandLineIcon,
       action: () => {
-        onCheckPlatforms?.();
+        onShowImportHistory?.();
         onClose();
       },
       category: 'actions',
-      keywords: ['ads', 'platforms', 'check', 'scan']
+      keywords: ['import', 'history', 'undo', 'revert', 'operations']
     },
+    ...(lastImportOperation && canUndoOperation(lastImportOperation) ? [{
+      id: 'undo-import',
+      name: `Undo Last Import (${lastImportOperation.lead_count} leads)`,
+      icon: ArrowUturnLeftIcon,
+      action: async () => {
+        if (undoInProgress) return;
+        
+        onClose();
+        const toastId = toast.loading('Undoing import...');
+        
+        try {
+          const result = await undoLastImport();
+          
+          if (result.success) {
+            toast.success(
+              `Successfully reverted ${result.deletedCount} lead${result.deletedCount !== 1 ? 's' : ''}`,
+              { id: toastId }
+            );
+          } else {
+            toast.error('Failed to undo import', { id: toastId });
+          }
+        } catch (error) {
+          toast.error('An error occurred while undoing', { id: toastId });
+        }
+      },
+      category: 'actions' as const,
+      keywords: ['undo', 'revert', 'import', 'delete', 'remove']
+    }] : []),
     
     // Filters
     {
@@ -152,7 +185,7 @@ export default function CommandPalette({
       name: 'Clear All Filters',
       icon: FunnelIcon,
       action: () => {
-        setSourceFilter({ instagram: true, adLibrary: true, googleMaps: true });
+        setSourceFilter({ instagram: true, adLibrary: true, googleMaps: true, csvImport: true });
         setCityFilter('all');
         setServiceTypeFilter('all');
         onClose();

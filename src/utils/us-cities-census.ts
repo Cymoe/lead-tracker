@@ -128,7 +128,20 @@ export async function loadCensusCities(): Promise<CensusCity[]> {
 // Get cities for a specific state
 export async function getCensusCitiesByState(stateCode: string): Promise<CensusCity[]> {
   await loadCensusCities();
-  return stateCache.get(stateCode) || [];
+  const cities = stateCache.get(stateCode) || [];
+  
+  // Deduplicate cities by name, keeping the first occurrence
+  const seen = new Set<string>();
+  const deduped: CensusCity[] = [];
+  
+  for (const city of cities) {
+    if (!seen.has(city.name)) {
+      seen.add(city.name);
+      deduped.push(city);
+    }
+  }
+  
+  return deduped;
 }
 
 // Search cities
@@ -184,7 +197,19 @@ export async function searchCensusCities(
     return a.name.localeCompare(b.name);
   });
   
-  return results.slice(0, limit);
+  // Deduplicate by city name + state code
+  const seen = new Set<string>();
+  const deduped: CensusCity[] = [];
+  
+  for (const city of results) {
+    const key = `${city.name}, ${city.stateCode}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(city);
+    }
+  }
+  
+  return deduped.slice(0, limit);
 }
 
 // Get state statistics

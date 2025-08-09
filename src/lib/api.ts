@@ -2,7 +2,7 @@ import { Lead } from '@/types';
 import { createClient } from './supabase/client';
 
 // Re-export all functions from supabase-api
-export { fetchLeads, saveLead, updateLead, updateLeads, deleteLead, deleteLeads, extractWithAI, extractWithAIStream } from './supabase-api';
+export { fetchLeads, fetchLeadsPaginated, saveLead, saveLeadsBatch, updateLead, updateLeads, updateLeadsBatch, deleteLead, deleteLeads, extractWithAI, extractWithAIStream } from './supabase-api';
 
 // New function to merge lead data from multiple sources
 export async function mergeLeadData(existingLead: Lead, newData: Partial<Lead>): Promise<Lead> {
@@ -33,7 +33,6 @@ export async function mergeLeadData(existingLead: Lead, newData: Partial<Lead>):
     running_ads: newData.running_ads || existingLead.running_ads,
     ad_copy: newData.ad_copy || existingLead.ad_copy,
     ad_start_date: newData.ad_start_date || existingLead.ad_start_date,
-    ad_call_to_action: newData.ad_call_to_action || existingLead.ad_call_to_action,
     
     // Merge notes (append if both exist)
     notes: existingLead.notes && newData.notes 
@@ -59,4 +58,22 @@ export async function mergeLeadData(existingLead: Lead, newData: Partial<Lead>):
 
   const { updateLead } = await import('./supabase-api');
   return updateLead(existingLead.id, mergedData);
+}
+
+// Function to delete all leads for the current user
+export async function deleteAllLeads(): Promise<{ success: boolean; message: string; count?: number }> {
+  const response = await fetch('/api/leads/delete-all', {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to delete leads');
+  }
+
+  return data;
 }

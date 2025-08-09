@@ -4,9 +4,7 @@ export function exportToGoogleSheets(leads: Lead[]): boolean {
   const headers = [
     'ID', 'Handle', 'Company Name', 'Service Type', 'City', 'Phone', 
     'Instagram URL', 'Website', 'Lead Source', 'Running Ads', 
-    'Ad Start Date', 'Ad Copy', 'Ad Call to Action', 'Service Areas',
-    'Price Info', 'Ad Platform', 'DM Sent', 'DM Response', 
-    'Called', 'Call Result', 'Follow Up Date', 'Score', 'Notes',
+    'Ad Start Date', 'Ad Copy', 'Ad Platform', 'Score', 'Notes',
     'Close CRM ID', 'Created At', 'Updated At'
   ];
   
@@ -23,15 +21,7 @@ export function exportToGoogleSheets(leads: Lead[]): boolean {
     lead.running_ads ? 'Yes' : 'No',
     lead.ad_start_date || '',
     lead.ad_copy || '',
-    lead.ad_call_to_action || '',
-    lead.service_areas || '',
-    lead.price_info || '',
     lead.ad_platform || '',
-    lead.dm_sent ? 'Yes' : 'No',
-    lead.dm_response || '',
-    lead.called ? 'Yes' : 'No',
-    lead.call_result || '',
-    lead.follow_up_date || '',
     lead.score || '',
     lead.notes || '',
     lead.close_crm_id || '',

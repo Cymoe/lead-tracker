@@ -5,7 +5,7 @@ export async function POST(request: Request) {
   const supabase = createClient();
 
   try {
-    const { runId, actorId } = await request.json();
+    const { runId, actorId, targetCity } = await request.json();
 
     if (!runId) {
       return NextResponse.json({ error: 'Run ID is required' }, { status: 400 });
@@ -15,6 +15,43 @@ export async function POST(request: Request) {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check if this Apify run has already been imported
+    const { data: existingImport, error: checkError } = await supabase
+      .from('apify_search_results')
+      .select('id, import_status, leads_imported, import_error')
+      .eq('user_id', user.id)
+      .eq('apify_run_id', runId)
+      .maybeSingle();  // Use maybeSingle instead of single to avoid error when not found
+    
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Error checking existing import:', checkError);
+    }
+
+    if (existingImport) {
+      // Import already exists
+      if (existingImport.import_status === 'completed') {
+        return NextResponse.json({ 
+          error: 'This Apify run has already been imported',
+          existingImport: {
+            id: existingImport.id,
+            status: existingImport.import_status,
+            leadsImported: existingImport.leads_imported
+          }
+        }, { status: 409 }); // Conflict
+      } else if (existingImport.import_status === 'processing') {
+        return NextResponse.json({ 
+          error: 'This import is already in progress',
+          existingImport: {
+            id: existingImport.id,
+            status: existingImport.import_status
+          }
+        }, { status: 409 });
+      } else if (existingImport.import_status === 'failed') {
+        // Allow retry of failed imports
+        console.log('Retrying failed import:', existingImport.id);
+      }
     }
 
     // Get Apify API key from environment
@@ -67,6 +104,66 @@ export async function POST(request: Request) {
       return NextResponse.json({ 
         error: 'No dataset found for this run. The run may still be in progress or failed.' 
       }, { status: 404 });
+    }
+
+    // Extract locationQuery and searchQuery from the run's input data
+    let locationQuery = '';
+    let searchQuery = '';
+    if (runData.data?.defaultKeyValueStoreId) {
+      try {
+        // Fetch the INPUT from the key-value store
+        const inputUrl = `https://api.apify.com/v2/key-value-stores/${runData.data.defaultKeyValueStoreId}/records/INPUT?token=${apifyApiKey}`;
+        const inputResponse = await fetch(inputUrl);
+        
+        if (inputResponse.ok) {
+          const inputData = await inputResponse.json();
+          
+          // Extract the actual search query (e.g., "Patio builder in Amarillo, TX")
+          searchQuery = inputData.searchStringsArray?.[0] || 
+                       inputData.searchString || 
+                       '';
+          
+          // Extract location query (e.g., "Amarillo, TX")
+          locationQuery = inputData.locationQuery || 
+                         inputData.location || 
+                         '';
+                         
+          // If no locationQuery but we have searchQuery, try to extract location from it
+          if (!locationQuery && searchQuery) {
+            // Extract location from search query like "Patio builder in Amarillo, TX"
+            const inMatch = searchQuery.match(/\s+in\s+(.+)$/i);
+            if (inMatch) {
+              locationQuery = inMatch[1];
+            }
+          }
+          
+          // Fallback to other fields if still no location
+          if (!locationQuery) {
+            locationQuery = inputData.coordinates?.string ||
+                           inputData.customGeolocation?.string ||
+                           '';
+          }
+          
+          // If we have coordinates array, try to extract the location string
+          if (!locationQuery && inputData.coordinates && Array.isArray(inputData.coordinates)) {
+            const firstCoord = inputData.coordinates[0];
+            if (firstCoord?.string) {
+              locationQuery = firstCoord.string;
+            }
+          }
+          
+          console.log('Apify run input data:', {
+            searchQuery,
+            locationQuery,
+            searchStringsArray: inputData.searchStringsArray,
+            allKeys: Object.keys(inputData)
+          });
+          console.log('Extracted searchQuery:', searchQuery);
+          console.log('Extracted locationQuery:', locationQuery);
+        }
+      } catch (error) {
+        console.error('Error fetching run input:', error);
+      }
     }
 
     // Now fetch dataset items
@@ -130,15 +227,71 @@ export async function POST(request: Request) {
       }
     }
 
+    // Extract city and state from targetCity or locationQuery
+    let overrideCity = '';
+    let overrideState = '';
+    const citySource = targetCity || locationQuery; // Use targetCity if provided, otherwise use Apify's locationQuery
+    
+    console.log('City source determination:', {
+      targetCity,
+      locationQuery,
+      citySource,
+      source: targetCity ? 'manual' : locationQuery ? 'apify' : 'none'
+    });
+    
+    if (citySource) {
+      const cityParts = citySource.split(',').map((part: string) => part.trim());
+      if (cityParts.length > 0) {
+        overrideCity = cityParts[0];
+        if (cityParts.length > 1) {
+          overrideState = cityParts[cityParts.length - 1];
+        }
+      }
+      console.log('Using city override:', { 
+        city: overrideCity, 
+        state: overrideState, 
+        source: targetCity ? 'manual' : 'apify',
+        originalString: citySource
+      });
+    } else {
+      console.log('WARNING: No city source found! Will try to use the most common city from results.');
+      
+      // Fallback: Find the most common city in the results
+      const cityCounts = new Map<string, number>();
+      rawResults.forEach((result: any) => {
+        if (result.city && result.city !== 'null') {
+          const cityState = `${result.city}, ${result.state || ''}`.trim();
+          cityCounts.set(cityState, (cityCounts.get(cityState) || 0) + 1);
+        }
+      });
+      
+      // Get the most common city
+      let mostCommonCity = '';
+      let maxCount = 0;
+      cityCounts.forEach((count, cityState) => {
+        if (count > maxCount) {
+          maxCount = count;
+          mostCommonCity = cityState;
+        }
+      });
+      
+      if (mostCommonCity) {
+        const parts = mostCommonCity.split(',').map(p => p.trim());
+        overrideCity = parts[0];
+        overrideState = parts[1] || '';
+        console.log(`Using most common city from results: ${overrideCity}, ${overrideState} (found in ${maxCount}/${rawResults.length} results)`);
+      }
+    }
+
     // Transform Apify results to match our format
     const transformedResults = rawResults.map((result: any) => {
-      // Use Apify's exact field names, handling null values
-      let city = (result.city && result.city !== 'null' && result.city !== null) ? result.city : '';
-      let state = (result.state && result.state !== 'null' && result.state !== null) ? result.state : '';
+      // ALWAYS use the searched city from locationQuery, ignore individual result cities
+      let city = overrideCity;
+      let state = overrideState;
       const street = (result.street && result.street !== 'null' && result.street !== null) ? result.street : '';
       
-      // If city or state is empty, try to extract from address
-      if ((!city || !state) && result.address) {
+      // Only try to extract from address if we don't have override values
+      if ((!overrideCity || !overrideState) && result.address) {
         // Try to parse city and state from address (format: "street, city, state zip")
         const addressParts = result.address.split(',');
         if (addressParts.length >= 3) {
@@ -210,6 +363,20 @@ export async function POST(request: Request) {
         cleanWebsite = '';
       }
 
+      // Debug logging for city/state
+      if (!city || !state) {
+        console.log(`Missing city/state for ${result.title}:`, {
+          city,
+          state,
+          overrideCity,
+          overrideState,
+          resultCity: result.city,
+          resultState: result.state,
+          address: result.address,
+          fullAddress
+        });
+      }
+      
       return {
         place_id: result.url || crypto.randomUUID(),
         name: result.title || 'Unknown Business',
@@ -226,10 +393,11 @@ export async function POST(request: Request) {
           phone: phone,
           website: cleanWebsite,
           service_type: result.categoryName || 'General',
-          source: 'Apify Import',
+          source: 'Google Maps',
           notes: signals.length > 0 ? signals.join(', ') : '',
-          city: city,
-          state: state
+          city: city || '',
+          state: state || '',
+          search_query: searchQuery || ''
         },
         // Include enriched data if available
         emails: result.emails || [],
@@ -244,42 +412,95 @@ export async function POST(request: Request) {
       };
     });
 
-    // Save to database for persistence
+    // Save to database with import tracking
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    const { data: savedSearch, error: saveError } = await supabase
-      .from('apify_search_results')
-      .insert({
-        user_id: user.id,
-        search_type: 'google_maps',
-        search_params: {
-          source: 'apify_import',
-          runId,
-          actorId: actorId || 'compass/crawler-google-places',
-          importedAt: new Date().toISOString()
-        },
-        results: transformedResults,
-        result_count: transformedResults.length,
-        search_mode: 'apify',
-        expires_at: expiresAt.toISOString(),
-        apify_run_id: runId,
-        contacts_found: transformedResults.filter((r: any) => r.formatted_phone_number).length,
-        emails_found: transformedResults.filter((r: any) => r.emails?.length > 0).length,
-        high_quality_leads: transformedResults.filter((r: any) => r.opportunity_score >= 80).length
-      })
-      .select()
-      .single();
+    // Create or update the search result record
+    const searchResultData = {
+      user_id: user.id,
+      search_type: 'google_maps' as const,
+      search_params: {
+        source: 'apify_import',
+        runId,
+        actorId: actorId || 'compass/crawler-google-places',
+        importedAt: new Date().toISOString(),
+        locationQuery: locationQuery || targetCity || '',
+        searchQuery: searchQuery || '',
+        // Also store the parsed city/state for easier access
+        parsedCity: overrideCity,
+        parsedState: overrideState
+      },
+      results: transformedResults,
+      result_count: transformedResults.length,
+      search_mode: 'apify',
+      expires_at: expiresAt.toISOString(),
+      apify_run_id: runId || null,  // Ensure null if no runId
+      import_status: 'pending',
+      import_started_at: new Date().toISOString()
+    };
+
+    let savedSearch;
+    let saveError;
+    
+    console.log('Attempting to save search result:', {
+      existingImport: !!existingImport,
+      runId,
+      resultCount: transformedResults.length,
+      locationQuery
+    });
+    
+    if (existingImport) {
+      // Update existing record
+      console.log('Updating existing import:', existingImport.id);
+      const { data, error } = await supabase
+        .from('apify_search_results')
+        .update(searchResultData)
+        .eq('id', existingImport.id)
+        .select()
+        .single();
+      savedSearch = data;
+      saveError = error;
+    } else {
+      // Insert new record
+      console.log('Creating new import record');
+      const { data, error } = await supabase
+        .from('apify_search_results')
+        .insert(searchResultData)
+        .select()
+        .single();
+      savedSearch = data;
+      saveError = error;
+    }
 
     if (saveError) {
       console.error('Error saving imported results:', saveError);
-      // Continue even if save fails - we still return the results
+      
+      // Check if it's a duplicate key error
+      if (saveError.code === '23505' && saveError.message?.includes('unique_apify_run_id')) {
+        return NextResponse.json({ 
+          error: 'This Apify run has already been imported',
+          hint: 'The run ID already exists in the database'
+        }, { status: 409 });
+      }
+      
+      return NextResponse.json({ 
+        error: 'Failed to save import record',
+        details: saveError.message,
+        code: saveError.code
+      }, { status: 500 });
     }
 
+    // Return results with import tracking info
     return NextResponse.json({ 
       results: transformedResults,
       count: transformedResults.length,
-      savedSearchId: savedSearch?.id
+      savedSearchId: savedSearch?.id,
+      importStatus: {
+        id: savedSearch?.id,
+        status: 'pending',
+        message: 'Import data ready. Use the import button to complete the process.'
+      }
     });
   } catch (error) {
     console.error('Error importing from Apify:', error);

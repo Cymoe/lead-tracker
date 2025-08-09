@@ -1,63 +1,55 @@
 import { Lead } from '@/types';
 
-export interface DuplicateGroup {
-  id: string;
-  leads: Lead[];
-  matchType: 'exact' | 'phone' | 'company' | 'instagram' | 'fuzzy';
-  confidence: number;
-  suggestedMaster?: Lead;
-}
+// Common business suffixes and words to remove for normalization
+const BUSINESS_SUFFIXES = [
+  'llc', 'inc', 'corp', 'corporation', 'company', 'co', 'ltd', 'limited',
+  'group', 'services', 'service', 'solutions', 'solution', 'systems',
+  'enterprises', 'enterprise', 'partners', 'partner', 'associates',
+  'az', 'arizona', 'phoenix az', 'phx', 'valley', 'southwest', 'sw'
+];
 
-/**
- * Normalize phone numbers for comparison
- */
-function normalizePhone(phone: string | null | undefined): string {
-  if (!phone) return '';
-  // Remove all non-digits
-  return phone.replace(/\D/g, '');
-}
-
-/**
- * Normalize company names for comparison
- */
-function normalizeCompanyName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '') // Remove special characters
-    .replace(/\b(llc|inc|corp|corporation|company|co)\b/g, '') // Remove common suffixes
+// Normalize company name by removing common suffixes and cleaning up
+export function normalizeCompanyName(name: string): string {
+  if (!name) return '';
+  
+  let normalized = name.toLowerCase()
+    .replace(/[^\w\s]/g, ' ') // Remove special characters
+    .replace(/\s+/g, ' ') // Multiple spaces to single
     .trim();
+  
+  // Remove common suffixes
+  BUSINESS_SUFFIXES.forEach(suffix => {
+    const regex = new RegExp(`\\b${suffix}\\b`, 'gi');
+    normalized = normalized.replace(regex, '');
+  });
+  
+  return normalized.trim();
 }
 
-/**
- * Calculate string similarity using Levenshtein distance
- */
-function calculateSimilarity(str1: string, str2: string): number {
-  const longer = str1.length > str2.length ? str1 : str2;
-  const shorter = str1.length > str2.length ? str2 : str1;
+// Calculate similarity between two strings (0-1)
+export function calculateSimilarity(str1: string, str2: string): number {
+  const s1 = str1.toLowerCase();
+  const s2 = str2.toLowerCase();
   
-  if (longer.length === 0) return 1.0;
+  if (s1 === s2) return 1;
   
-  const editDistance = levenshteinDistance(longer, shorter);
-  return (longer.length - editDistance) / longer.length;
-}
-
-/**
- * Calculate Levenshtein distance between two strings
- */
-function levenshteinDistance(str1: string, str2: string): number {
+  // Levenshtein distance
   const matrix: number[][] = [];
+  const len1 = s1.length;
+  const len2 = s2.length;
   
-  for (let i = 0; i <= str2.length; i++) {
+  // Initialize matrix
+  for (let i = 0; i <= len1; i++) {
     matrix[i] = [i];
   }
-  
-  for (let j = 0; j <= str1.length; j++) {
+  for (let j = 0; j <= len2; j++) {
     matrix[0][j] = j;
   }
   
-  for (let i = 1; i <= str2.length; i++) {
-    for (let j = 1; j <= str1.length; j++) {
-      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+  // Calculate distances
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      if (s1[i - 1] === s2[j - 1]) {
         matrix[i][j] = matrix[i - 1][j - 1];
       } else {
         matrix[i][j] = Math.min(
@@ -69,217 +61,327 @@ function levenshteinDistance(str1: string, str2: string): number {
     }
   }
   
-  return matrix[str2.length][str1.length];
+  const distance = matrix[len1][len2];
+  const maxLen = Math.max(len1, len2);
+  
+  return maxLen === 0 ? 1 : 1 - (distance / maxLen);
 }
 
-/**
- * Find duplicate leads based on various criteria
- */
-export function findDuplicates(leads: Lead[]): DuplicateGroup[] {
-  const duplicateGroups: DuplicateGroup[] = [];
-  const processedLeadIds = new Set<string>();
+// Check if two company names are similar enough to be duplicates
+export function areCompaniesSimilar(
+  company1: string, 
+  company2: string, 
+  threshold: number = 0.8
+): boolean {
+  const norm1 = normalizeCompanyName(company1);
+  const norm2 = normalizeCompanyName(company2);
   
-  // Create indexes for efficient lookup
-  const phoneIndex = new Map<string, Lead[]>();
-  const companyIndex = new Map<string, Lead[]>();
-  const instagramIndex = new Map<string, Lead[]>();
-  
-  // Build indexes
-  leads.forEach(lead => {
-    // Phone index
-    const normalizedPhone = normalizePhone(lead.phone);
-    if (normalizedPhone) {
-      if (!phoneIndex.has(normalizedPhone)) {
-        phoneIndex.set(normalizedPhone, []);
-      }
-      phoneIndex.get(normalizedPhone)!.push(lead);
-    }
-    
-    // Company name index
-    const normalizedCompany = normalizeCompanyName(lead.company_name);
-    if (!companyIndex.has(normalizedCompany)) {
-      companyIndex.set(normalizedCompany, []);
-    }
-    companyIndex.get(normalizedCompany)!.push(lead);
-    
-    // Instagram handle index
-    if (lead.handle) {
-      const normalizedHandle = lead.handle.toLowerCase().replace('@', '');
-      if (!instagramIndex.has(normalizedHandle)) {
-        instagramIndex.set(normalizedHandle, []);
-      }
-      instagramIndex.get(normalizedHandle)!.push(lead);
-    }
-  });
-  
-  // Find exact duplicates (same phone)
-  phoneIndex.forEach((groupLeads, phone) => {
-    if (groupLeads.length > 1) {
-      const unprocessedLeads = groupLeads.filter(lead => !processedLeadIds.has(lead.id));
-      if (unprocessedLeads.length > 1) {
-        const group: DuplicateGroup = {
-          id: `phone-${phone}`,
-          leads: unprocessedLeads,
-          matchType: 'phone',
-          confidence: 0.95,
-          suggestedMaster: selectMasterLead(unprocessedLeads)
-        };
-        duplicateGroups.push(group);
-        unprocessedLeads.forEach(lead => processedLeadIds.add(lead.id));
-      }
-    }
-  });
-  
-  // Find Instagram handle duplicates
-  instagramIndex.forEach((groupLeads, handle) => {
-    if (groupLeads.length > 1) {
-      const unprocessedLeads = groupLeads.filter(lead => !processedLeadIds.has(lead.id));
-      if (unprocessedLeads.length > 1) {
-        const group: DuplicateGroup = {
-          id: `instagram-${handle}`,
-          leads: unprocessedLeads,
-          matchType: 'instagram',
-          confidence: 0.9,
-          suggestedMaster: selectMasterLead(unprocessedLeads)
-        };
-        duplicateGroups.push(group);
-        unprocessedLeads.forEach(lead => processedLeadIds.add(lead.id));
-      }
-    }
-  });
-  
-  // Find company name duplicates (exact match after normalization)
-  companyIndex.forEach((groupLeads, company) => {
-    if (groupLeads.length > 1) {
-      const unprocessedLeads = groupLeads.filter(lead => !processedLeadIds.has(lead.id));
-      if (unprocessedLeads.length > 1) {
-        const group: DuplicateGroup = {
-          id: `company-${company}`,
-          leads: unprocessedLeads,
-          matchType: 'company',
-          confidence: 0.8,
-          suggestedMaster: selectMasterLead(unprocessedLeads)
-        };
-        duplicateGroups.push(group);
-        unprocessedLeads.forEach(lead => processedLeadIds.add(lead.id));
-      }
-    }
-  });
-  
-  // Find fuzzy duplicates (similar company names)
-  const remainingLeads = leads.filter(lead => !processedLeadIds.has(lead.id));
-  for (let i = 0; i < remainingLeads.length; i++) {
-    if (processedLeadIds.has(remainingLeads[i].id)) continue;
-    
-    const similarLeads = [remainingLeads[i]];
-    const baseCompany = normalizeCompanyName(remainingLeads[i].company_name);
-    
-    for (let j = i + 1; j < remainingLeads.length; j++) {
-      if (processedLeadIds.has(remainingLeads[j].id)) continue;
-      
-      const compareCompany = normalizeCompanyName(remainingLeads[j].company_name);
-      const similarity = calculateSimilarity(baseCompany, compareCompany);
-      
-      // Check if companies are similar enough and in the same city
-      if (similarity > 0.8 && remainingLeads[i].city === remainingLeads[j].city) {
-        similarLeads.push(remainingLeads[j]);
-      }
-    }
-    
-    if (similarLeads.length > 1) {
-      const group: DuplicateGroup = {
-        id: `fuzzy-${remainingLeads[i].id}`,
-        leads: similarLeads,
-        matchType: 'fuzzy',
-        confidence: 0.7,
-        suggestedMaster: selectMasterLead(similarLeads)
-      };
-      duplicateGroups.push(group);
-      similarLeads.forEach(lead => processedLeadIds.add(lead.id));
-    }
+  // Check if one is a substring of the other (after normalization)
+  if (norm1.includes(norm2) || norm2.includes(norm1)) {
+    return true;
   }
   
-  return duplicateGroups.sort((a, b) => b.confidence - a.confidence);
+  // Calculate similarity
+  const similarity = calculateSimilarity(norm1, norm2);
+  return similarity >= threshold;
 }
 
-/**
- * Select the best lead to keep from a group of duplicates
- */
-function selectMasterLead(leads: Lead[]): Lead {
-  // Score each lead based on data completeness and quality
-  const scoredLeads = leads.map(lead => {
-    let score = 0;
+// Find duplicate lead in existing leads
+export function findDuplicateLead(
+  newLead: Partial<Lead>, 
+  existingLeads: Lead[],
+  options: {
+    checkCity?: boolean;
+    similarityThreshold?: number;
+  } = {}
+): Lead | undefined {
+  const { checkCity = true, similarityThreshold = 0.8 } = options;
+  
+  return existingLeads.find(existing => {
+    // First check if company names are similar
+    if (!areCompaniesSimilar(
+      newLead.company_name || '', 
+      existing.company_name, 
+      similarityThreshold
+    )) {
+      return false;
+    }
     
-    // Prefer leads with more complete data
-    if (lead.phone) score += 3;
-    if (lead.website) score += 2;
-    if (lead.instagram_url) score += 2;
-    if (lead.handle) score += 1;
-    if (lead.notes) score += 1;
-    if (lead.service_type) score += 1;
-    if (lead.city) score += 1;
-    if (lead.running_ads) score += 1;
-    if (lead.ad_copy) score += 1;
-    if (lead.price_info) score += 1;
+    // If checking city, ensure they match
+    if (checkCity && newLead.city && existing.city) {
+      const city1 = newLead.city.toLowerCase().trim();
+      const city2 = existing.city.toLowerCase().trim();
+      if (city1 !== city2) {
+        return false;
+      }
+    }
     
-    // Prefer leads from certain sources
-    if (lead.lead_source === 'Instagram Manual') score += 2;
-    if (lead.lead_source === 'Google Maps') score += 1;
+    return true;
+  });
+}
+
+// Batch duplicate detection for multiple leads
+export function detectDuplicates(
+  newLeads: Partial<Lead>[], 
+  existingLeads: Lead[],
+  options: {
+    checkCity?: boolean;
+    similarityThreshold?: number;
+  } = {}
+): {
+  unique: Partial<Lead>[];
+  duplicates: Array<{ lead: Partial<Lead>; existing: Lead }>;
+} {
+  const unique: Partial<Lead>[] = [];
+  const duplicates: Array<{ lead: Partial<Lead>; existing: Lead }> = [];
+  const processedInBatch = new Set<string>();
+  
+  newLeads.forEach(lead => {
+    const leadKey = `${lead.company_name?.toLowerCase()}_${lead.city?.toLowerCase()}`;
     
-    // Prefer newer leads (updated more recently)
-    const daysSinceUpdate = (Date.now() - new Date(lead.updated_at).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSinceUpdate < 7) score += 2;
-    else if (daysSinceUpdate < 30) score += 1;
+    // Check if already processed in this batch
+    if (processedInBatch.has(leadKey)) {
+      return;
+    }
     
-    return { lead, score };
+    // Check against existing leads
+    const existingDupe = findDuplicateLead(lead, existingLeads, options);
+    if (existingDupe) {
+      duplicates.push({ lead, existing: existingDupe });
+    } else {
+      // Check against already processed unique leads in this batch
+      const batchDupe = findDuplicateLead(lead, unique as Lead[], options);
+      if (!batchDupe) {
+        unique.push(lead);
+        processedInBatch.add(leadKey);
+      }
+    }
   });
   
-  // Sort by score descending and return the best one
-  scoredLeads.sort((a, b) => b.score - a.score);
-  return scoredLeads[0].lead;
+  return { unique, duplicates };
 }
 
-/**
- * Merge duplicate leads into a single lead
- */
+// Types for duplicate detection modal
+export interface DuplicateGroup {
+  id: string;
+  leads: Lead[];
+  similarityScore: number;
+  suggestedMaster?: Lead;
+  matchType?: 'exact' | 'similar' | 'potential';
+  confidence: number;
+}
+
+// Find duplicate groups across all leads - Optimized O(n) version
+export function findDuplicates(leads: Lead[]): DuplicateGroup[] {
+  console.log(`Starting duplicate detection for ${leads.length} leads...`);
+  const startTime = Date.now();
+  
+  const groups: DuplicateGroup[] = [];
+  const processedIds = new Set<string>();
+  
+  // Build hash maps for O(1) lookups
+  const phoneMap = new Map<string, Lead[]>();
+  const handleMap = new Map<string, Lead[]>();
+  const companyLocationMap = new Map<string, Lead[]>();
+  
+  // Normalize phone numbers for comparison
+  const normalizePhone = (phone: string | null | undefined): string => {
+    if (!phone) return '';
+    return phone.replace(/\D/g, ''); // Remove all non-digits
+  };
+  
+  // First pass: Build lookup maps
+  console.log('Building lookup maps...');
+  leads.forEach(lead => {
+    // Phone map
+    if (lead.phone) {
+      const normalizedPhone = normalizePhone(lead.phone);
+      if (normalizedPhone) {
+        if (!phoneMap.has(normalizedPhone)) {
+          phoneMap.set(normalizedPhone, []);
+        }
+        phoneMap.get(normalizedPhone)!.push(lead);
+      }
+    }
+    
+    // Instagram handle map
+    if (lead.handle) {
+      const lowerHandle = lead.handle.toLowerCase();
+      if (!handleMap.has(lowerHandle)) {
+        handleMap.set(lowerHandle, []);
+      }
+      handleMap.get(lowerHandle)!.push(lead);
+    }
+    
+    // Company + location map
+    if (lead.company_name && lead.city) {
+      const key = `${normalizeCompanyName(lead.company_name)}|${lead.city.toLowerCase()}`;
+      if (!companyLocationMap.has(key)) {
+        companyLocationMap.set(key, []);
+      }
+      companyLocationMap.get(key)!.push(lead);
+    }
+  });
+  
+  console.log(`Maps built. Found ${phoneMap.size} unique phones, ${handleMap.size} unique handles, ${companyLocationMap.size} unique company+city combos`);
+  
+  // Process phone duplicates
+  phoneMap.forEach((duplicateLeads, phone) => {
+    if (duplicateLeads.length > 1) {
+      const unprocessedDupes = duplicateLeads.filter(lead => !processedIds.has(lead.id));
+      if (unprocessedDupes.length > 1) {
+        unprocessedDupes.forEach(lead => processedIds.add(lead.id));
+        
+        // Find best master
+        const suggestedMaster = findBestMaster(unprocessedDupes);
+        
+        groups.push({
+          id: `group-${groups.length + 1}`,
+          leads: unprocessedDupes,
+          similarityScore: 0.95,
+          suggestedMaster,
+          matchType: 'exact',
+          confidence: 0.95
+        });
+      }
+    }
+  });
+  
+  // Process Instagram handle duplicates
+  handleMap.forEach((duplicateLeads, handle) => {
+    if (duplicateLeads.length > 1) {
+      const unprocessedDupes = duplicateLeads.filter(lead => !processedIds.has(lead.id));
+      if (unprocessedDupes.length > 1) {
+        unprocessedDupes.forEach(lead => processedIds.add(lead.id));
+        
+        const suggestedMaster = findBestMaster(unprocessedDupes);
+        
+        groups.push({
+          id: `group-${groups.length + 1}`,
+          leads: unprocessedDupes,
+          similarityScore: 0.95,
+          suggestedMaster,
+          matchType: 'exact',
+          confidence: 0.95
+        });
+      }
+    }
+  });
+  
+  // Process company + location duplicates
+  companyLocationMap.forEach((duplicateLeads, key) => {
+    if (duplicateLeads.length > 1) {
+      const unprocessedDupes = duplicateLeads.filter(lead => !processedIds.has(lead.id));
+      if (unprocessedDupes.length > 1) {
+        unprocessedDupes.forEach(lead => processedIds.add(lead.id));
+        
+        const suggestedMaster = findBestMaster(unprocessedDupes);
+        
+        groups.push({
+          id: `group-${groups.length + 1}`,
+          leads: unprocessedDupes,
+          similarityScore: 0.9,
+          suggestedMaster,
+          matchType: 'similar',
+          confidence: 0.9
+        });
+      }
+    }
+  });
+  
+  const endTime = Date.now();
+  console.log(`Duplicate detection completed in ${endTime - startTime}ms. Found ${groups.length} duplicate groups.`);
+  
+  return groups;
+}
+
+// Helper function to find the best master lead
+function findBestMaster(leads: Lead[]): Lead {
+  return leads.reduce((best, current) => {
+    let bestScore = 0;
+    let currentScore = 0;
+    
+    // Score based on data completeness
+    if (best.phone) bestScore++;
+    if (best.email) bestScore++;
+    if (best.website) bestScore++;
+    if (best.address) bestScore++;
+    if (best.running_ads) bestScore += 2;
+    if (best.rating) bestScore++;
+    if (best.lead_source === 'CSV Import') bestScore--; // Prefer original sources
+    
+    if (current.phone) currentScore++;
+    if (current.email) currentScore++;
+    if (current.website) currentScore++;
+    if (current.address) currentScore++;
+    if (current.running_ads) currentScore += 2;
+    if (current.rating) currentScore++;
+    if (current.lead_source === 'CSV Import') currentScore--; // Prefer original sources
+    
+    return currentScore > bestScore ? current : best;
+  });
+}
+
+// Merge duplicate leads into a single lead
 export function mergeLeads(leads: Lead[], masterId: string): Partial<Lead> {
-  const master = leads.find(l => l.id === masterId);
-  if (!master) throw new Error('Master lead not found');
+  const masterLead = leads.find(l => l.id === masterId);
+  if (!masterLead) {
+    throw new Error('Master lead not found');
+  }
   
-  const merged: Partial<Lead> = { ...master };
+  // Start with master lead data
+  const merged: Partial<Lead> = { ...masterLead };
   
-  // Merge data from other leads, preferring non-null values
+  // Merge data from other leads, preferring non-empty values
   leads.forEach(lead => {
     if (lead.id === masterId) return;
     
-    // Merge simple fields - prefer non-null values
+    // Basic fields - keep master unless it's empty
     if (!merged.phone && lead.phone) merged.phone = lead.phone;
+    if (!merged.email && lead.email) merged.email = lead.email;
     if (!merged.website && lead.website) merged.website = lead.website;
-    if (!merged.instagram_url && lead.instagram_url) merged.instagram_url = lead.instagram_url;
+    if (!merged.address && lead.address) merged.address = lead.address;
+    if (!merged.full_address && lead.full_address) merged.full_address = lead.full_address;
     if (!merged.handle && lead.handle) merged.handle = lead.handle;
-    if (!merged.service_type && lead.service_type) merged.service_type = lead.service_type;
+    
+    // Location data
     if (!merged.city && lead.city) merged.city = lead.city;
-    if (!merged.ad_copy && lead.ad_copy) merged.ad_copy = lead.ad_copy;
-    if (!merged.price_info && lead.price_info) merged.price_info = lead.price_info;
-    if (!merged.service_areas && lead.service_areas) merged.service_areas = lead.service_areas;
+    if (!merged.state && lead.state) merged.state = lead.state;
     
-    // Merge boolean fields - true takes precedence
+    // Business data
+    if (!merged.service_type && lead.service_type) merged.service_type = lead.service_type;
+    if (!merged.rating && lead.rating) merged.rating = lead.rating;
+    if (!merged.review_count && lead.review_count) merged.review_count = lead.review_count;
+    
+    // URLs
+    if (!merged.google_maps_url && lead.google_maps_url) merged.google_maps_url = lead.google_maps_url;
+    if (!merged.facebook_url && lead.facebook_url) merged.facebook_url = lead.facebook_url;
+    if (!merged.instagram_url && lead.instagram_url) merged.instagram_url = lead.instagram_url;
+    
+    // Ad data - merge if any lead has ads
     if (lead.running_ads) merged.running_ads = true;
-    if (lead.dm_sent) merged.dm_sent = true;
-    if (lead.called) merged.called = true;
-    
-    // Merge notes - combine if different
-    if (lead.notes && lead.notes !== merged.notes) {
-      merged.notes = merged.notes 
-        ? `${merged.notes}\n\n--- Merged from duplicate ---\n${lead.notes}`
-        : lead.notes;
+    if (lead.ad_platforms && lead.ad_platforms.length > 0) {
+      if (!merged.ad_platforms) merged.ad_platforms = [];
+      // Merge ad platforms avoiding duplicates
+      lead.ad_platforms.forEach(platform => {
+        if (!merged.ad_platforms!.some(p => p.platform === platform.platform)) {
+          merged.ad_platforms!.push(platform);
+        }
+      });
     }
     
-    // Keep the best score
-    if (lead.score && (!merged.score || lead.score > merged.score)) {
-      merged.score = lead.score;
+    // Merge notes
+    if (lead.notes) {
+      if (merged.notes) {
+        merged.notes = `${merged.notes}\n---\n${lead.notes}`;
+      } else {
+        merged.notes = lead.notes;
+      }
     }
   });
+  
+  // Update merge metadata
+  merged.updated_at = new Date().toISOString();
   
   return merged;
 }

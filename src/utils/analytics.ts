@@ -10,14 +10,6 @@ export interface LeadStats {
   withInstagram: number;
   withWebsite: number;
   runningAds: number;
-  dmSent: number;
-  called: number;
-  conversionFunnel: {
-    total: number;
-    contacted: number;
-    responded: number;
-    converted: number;
-  };
 }
 
 export interface LeadTrends {
@@ -42,14 +34,6 @@ export function calculateLeadStats(leads: Lead[]): LeadStats {
     withInstagram: 0,
     withWebsite: 0,
     runningAds: 0,
-    dmSent: 0,
-    called: 0,
-    conversionFunnel: {
-      total: leads.length,
-      contacted: 0,
-      responded: 0,
-      converted: 0,
-    },
   };
 
   // Initialize monthly data for the last 6 months
@@ -92,13 +76,6 @@ export function calculateLeadStats(leads: Lead[]): LeadStats {
 
     // Count actions
     if (lead.running_ads) stats.runningAds++;
-    if (lead.dm_sent) stats.dmSent++;
-    if (lead.called) stats.called++;
-
-    // Conversion funnel
-    if (lead.dm_sent || lead.called) {
-      stats.conversionFunnel.contacted++;
-    }
     // Note: We don't have response/conversion tracking yet
     // These would need additional fields in the Lead model
   });

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useLeadStore } from '@/lib/store';
 import { Lead } from '@/types';
 import Sidebar from '@/components/Sidebar';
+import LoadingScreen from '@/components/LoadingScreen';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { 
@@ -17,7 +18,7 @@ import AddLeadModal from '@/components/modals/AddLeadModal';
 import BulkEditModal from '@/components/modals/BulkEditModal';
 import GoogleSheetsSyncModal from '@/components/modals/GoogleSheetsSyncModal';
 import DuplicateDetectionModal from '@/components/modals/DuplicateDetectionModal';
-import AdPlatformModal from '@/components/modals/AdPlatformModal';
+import MarketAnalysis from '@/components/MarketAnalysis';
 
 export default function AnalyticsPage() {
   const { leads, selectedLeads, setSelectedLeads } = useLeadStore();
@@ -39,13 +40,25 @@ export default function AnalyticsPage() {
   const [showBulkEdit, setShowBulkEdit] = useState(false);
   const [showGoogleSheetsSync, setShowGoogleSheetsSync] = useState(false);
   const [showDuplicateDetection, setShowDuplicateDetection] = useState(false);
-  const [showAdPlatformCheck, setShowAdPlatformCheck] = useState(false);
+  const [isViewsPanelOpen, setIsViewsPanelOpen] = useState(false);
   
   const handleToggleSidebar = () => {
     const newValue = !isSidebarCollapsed;
     setIsSidebarCollapsed(newValue);
     localStorage.setItem('sidebarCollapsed', newValue.toString());
+    // Emit event for other components to listen
+    window.dispatchEvent(new Event('sidebarToggled'));
   };
+  
+  // Listen for Views panel state changes from AppLayout
+  useEffect(() => {
+    const handleViewsPanelToggle = (event: CustomEvent) => {
+      setIsViewsPanelOpen(event.detail.isOpen);
+    };
+    
+    window.addEventListener('viewsPanelToggled', handleViewsPanelToggle as EventListener);
+    return () => window.removeEventListener('viewsPanelToggled', handleViewsPanelToggle as EventListener);
+  }, []);
   
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -92,14 +105,7 @@ export default function AnalyticsPage() {
   const trendPercentage = leads.length > 0 ? ((leadsThisWeek / leads.length) * 100).toFixed(0) : '0';
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!user) {
@@ -115,13 +121,14 @@ export default function AnalyticsPage() {
         onAnalytics={() => {}} // We're already on analytics page
         onSettings={() => setShowSettings(true)}
         onBulkEdit={() => setShowBulkEdit(true)}
-        onAdPlatformCheck={() => setShowAdPlatformCheck(true)}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={handleToggleSidebar}
       />
       
-      <div className={`transition-all duration-300 ${
-        isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-72'
+      <div className={`flex-1 transition-all duration-300 ${
+        isSidebarCollapsed 
+          ? isViewsPanelOpen ? 'lg:pl-[384px]' : 'lg:pl-16'
+          : isViewsPanelOpen ? 'lg:pl-[544px]' : 'lg:pl-56'
       }`}>
         <main className="py-10 bg-gray-50 min-h-screen">
           <div className="px-4 sm:px-6 lg:px-8">
@@ -278,6 +285,11 @@ export default function AnalyticsPage() {
                 </div>
               </div>
             </div>
+
+            {/* Market Analysis Section */}
+            <div className="mt-8">
+              <MarketAnalysis leads={leads} />
+            </div>
           </div>
         </main>
       </div>
@@ -295,11 +307,6 @@ export default function AnalyticsPage() {
       />
       <GoogleSheetsSyncModal open={showGoogleSheetsSync} onClose={() => setShowGoogleSheetsSync(false)} />
       <DuplicateDetectionModal open={showDuplicateDetection} onClose={() => setShowDuplicateDetection(false)} />
-      <AdPlatformModal 
-        open={showAdPlatformCheck} 
-        onClose={() => setShowAdPlatformCheck(false)} 
-        selectedLeadIds={selectedLeads}
-      />
     </>
   );
 } 

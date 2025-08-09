@@ -1,13 +1,13 @@
 import { useState, Fragment, useRef, useEffect } from 'react';
 import { useLeadStore } from '@/lib/store';
 import { Lead } from '@/types';
-import { CheckIcon, TrashIcon, PencilSquareIcon, GlobeAltIcon, EyeIcon, EyeSlashIcon, EllipsisVerticalIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, TrashIcon, PencilSquareIcon, EyeIcon, EyeSlashIcon, EllipsisVerticalIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { deleteLead as deleteLeadAPI, deleteLeads as deleteLeadsAPI, updateLead as updateLeadAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
 import EditLeadModal from './modals/EditLeadModal';
 import BulkEditModal from './modals/BulkEditModal';
-import AdPlatformModal from './modals/AdPlatformModal';
 import AdViewerModal from './modals/AdViewerModal';
+import ImportHistoryModal from './modals/ImportHistoryModal';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useTableKeyboardNavigation } from '@/hooks/useTableKeyboardNavigation';
 import { getCategoryForBusiness } from '@/utils/grey-tsunami-business-types';
@@ -15,26 +15,33 @@ import AdPlatformChecker from './AdPlatformChecker';
 import { ensureProtocol } from '@/utils/csv-parser';
 import { Menu, Transition } from '@headlessui/react';
 import InlineEditableCell from './InlineEditableCell';
-import BulkOperationsBar from './BulkOperationsBar';
+// import BulkOperationsBar from './BulkOperationsBar'; // Disabled
 import CommandPalette from './CommandPalette';
 import ResizableColumn from './ResizableColumn';
 import MobileLeadCard from './MobileLeadCard';
+import { normalizeServiceType } from '@/utils/service-type-normalization';
 import useMediaQuery from '@/hooks/useMediaQuery';
+
 
 interface LeadTableProps {
   visibleColumns: {
     handle: boolean;
     company: boolean;
     type: boolean;
+    searchQuery: boolean;
     city: boolean;
+    state: boolean;
     phone: boolean;
     email: boolean;
+    additionalEmails: boolean;
+    address: boolean;
     rating: boolean;
+    reviewCount: boolean;
+    score: boolean;
     links: boolean;
     source: boolean;
     ads: boolean;
     adPlatforms: boolean;
-    notes: boolean;
     close: boolean;
     actions: boolean;
   };
@@ -42,24 +49,31 @@ interface LeadTableProps {
     handle: boolean;
     company: boolean;
     type: boolean;
+    searchQuery: boolean;
     city: boolean;
+    state: boolean;
     phone: boolean;
     email: boolean;
+    additionalEmails: boolean;
+    address: boolean;
     rating: boolean;
+    reviewCount: boolean;
+    score: boolean;
     links: boolean;
     source: boolean;
     ads: boolean;
     adPlatforms: boolean;
-    notes: boolean;
     close: boolean;
     actions: boolean;
   }>>;
   isHeaderCollapsed: boolean;
+  filteredLeads?: Lead[];
+  startIndex?: number;
 }
 
-export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderCollapsed }: LeadTableProps) {
+export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderCollapsed, filteredLeads, startIndex = 0 }: LeadTableProps) {
   const { 
-    leads, 
+    leads: allLeads, 
     sourceFilter, 
     deleteLead, 
     updateLead,
@@ -68,7 +82,11 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
     cityFilter,
     serviceTypeFilter,
     viewDensity,
-    viewMode
+    viewMode,
+    newlyImportedLeads,
+    clearNewlyImported,
+    showOnlyNewImports,
+    setShowOnlyNewImports
   } = useLeadStore();
   
   // Check if we're on mobile
@@ -82,15 +100,29 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
     handle: false,
     company: true,
     type: true,
+    searchQuery: false,
     city: true,
+    state: false,
     phone: true,
     email: false,
+    additionalEmails: false,
+    address: false,
     rating: false,
+    reviewCount: false,
+    score: false,
     links: false,
     source: false,
     ads: false,
     adPlatforms: false,
-    notes: false,
+    adCTA: false,
+    adStartDate: false,
+    serviceAreas: false,
+    priceInfo: false,
+    dmSent: false,
+    dmResponse: false,
+    called: false,
+    callResult: false,
+    followUpDate: false,
     close: false,
     actions: true
   };
@@ -101,14 +133,12 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showBulkEditModal, setShowBulkEditModal] = useState(false);
-  const [showAdPlatformModal, setShowAdPlatformModal] = useState(false);
-  const [adPlatformLeadId, setAdPlatformLeadId] = useState<string | null>(null);
   const [showAdViewerModal, setShowAdViewerModal] = useState(false);
   const [adViewerLead, setAdViewerLead] = useState<Lead | null>(null);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showImportHistoryModal, setShowImportHistoryModal] = useState(false);
   const tableRef = useRef<HTMLTableElement>(null);
   const { focusedCell, isEditing } = useTableKeyboardNavigation(tableRef);
-
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -119,7 +149,32 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
     }
   };
 
-  const filteredLeads = leads.filter((lead) => {
+  // Use provided filtered leads or apply local filters
+  const leads = filteredLeads || allLeads;
+  
+  // Debug filtering issue
+  if (filteredLeads && sourceFilter.csvImport && !sourceFilter.instagram && !sourceFilter.adLibrary && !sourceFilter.googleMaps) {
+    console.log('LeadTable received filteredLeads:', filteredLeads.length);
+    if (filteredLeads.length > 0) {
+      console.log('First lead in filteredLeads:', filteredLeads[0]);
+    }
+  }
+  
+  const localFilteredLeads = leads.filter((lead) => {
+    // If we're using pre-filtered leads, skip all filtering
+    if (filteredLeads) {
+      // Only apply the new imports filter if active
+      if (showOnlyNewImports) {
+        return newlyImportedLeads.includes(lead.id);
+      }
+      return true;
+    }
+    
+    // Show only new imports filter (overrides other filters when active)
+    if (showOnlyNewImports) {
+      return newlyImportedLeads.includes(lead.id);
+    }
+    
     // Multi-source filter (special case)
     if (sourceFilter.instagram === false && sourceFilter.adLibrary === false && sourceFilter.googleMaps === false) {
       // This means we're in "multi-source only" mode
@@ -133,19 +188,32 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
       if (lead.lead_source === 'Instagram Manual' && !sourceFilter.instagram) return false;
       if (lead.lead_source === 'FB Ad Library' && !sourceFilter.adLibrary) return false;
       if (lead.lead_source === 'Google Maps' && !sourceFilter.googleMaps) return false;
+      if (lead.lead_source === 'CSV Import' && !sourceFilter.csvImport) return false;
     }
     
     // City filter
     if (cityFilter !== 'all' && lead.city !== cityFilter) return false;
     
     // Service type filter
-    if (serviceTypeFilter !== 'all' && lead.service_type !== serviceTypeFilter) return false;
+    if (serviceTypeFilter !== 'all') {
+      const normalizedType = lead.service_type ? normalizeServiceType(lead.service_type) : null;
+      if (normalizedType !== serviceTypeFilter) return false;
+    }
     
     return true;
   });
   
+  // Debug local filtering
+  if (sourceFilter.csvImport && !sourceFilter.instagram && !sourceFilter.adLibrary && !sourceFilter.googleMaps) {
+    console.log('After local filtering, leads count:', localFilteredLeads.length);
+    if (localFilteredLeads.length === 0 && leads.length > 0) {
+      console.log('Local filtering removed all leads! Checking filter logic...');
+      console.log('filteredLeads prop provided?', !!filteredLeads);
+    }
+  }
+  
   // Sort the filtered leads
-  const sortedLeads = [...filteredLeads].sort((a, b) => {
+  const sortedLeads = [...localFilteredLeads].sort((a, b) => {
     if (!sortField) return 0;
     
     let aValue = a[sortField as keyof Lead];
@@ -165,6 +233,45 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
       return bStr.localeCompare(aStr);
     }
   });
+
+  // Clear newly imported highlights after 10 seconds and scroll to show new leads
+  useEffect(() => {
+    if (newlyImportedLeads.length > 0) {
+      // Find all newly imported leads in the sorted list
+      const newLeadsInView = sortedLeads.filter(lead => newlyImportedLeads.includes(lead.id));
+      
+      if (newLeadsInView.length > 0) {
+        // Scroll to the first new lead after a short delay to ensure rendering
+        setTimeout(() => {
+          const firstNewLead = newLeadsInView[0];
+          const leadRow = document.getElementById(`lead-row-${firstNewLead.id}`);
+          if (leadRow) {
+            // If showing only new imports, scroll to top of table
+            if (showOnlyNewImports) {
+              leadRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+              // Otherwise center the first new lead
+              leadRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            
+            // Flash the row for emphasis
+            leadRow.classList.add('flash-highlight');
+            setTimeout(() => {
+              leadRow.classList.remove('flash-highlight');
+            }, 1000);
+          }
+        }, 300);
+      }
+
+      // Clear highlights after 60 seconds (1 minute for much better visibility)
+      const timer = setTimeout(() => {
+        clearNewlyImported();
+        setShowOnlyNewImports(false);
+      }, 60000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [newlyImportedLeads, sortedLeads, clearNewlyImported, showOnlyNewImports, setShowOnlyNewImports]);
 
   const toggleSelectAll = () => {
     if (storeSelectedLeads.length === sortedLeads.length) {
@@ -282,14 +389,13 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
     return (
       <>
         <div className="bg-gray-50 min-h-screen">
-          {/* Bulk operations bar for mobile */}
-          <BulkOperationsBar
+          {/* Bulk operations bar for mobile - Disabled */}
+          {/* <BulkOperationsBar
             selectedCount={storeSelectedLeads.length}
             onBulkEdit={() => setShowBulkEditModal(true)}
             onExport={() => {}}
-            onCheckPlatforms={() => setShowAdPlatformModal(true)}
             onClearSelection={() => setSelectedLeads([])}
-          />
+          /> */}
           
           {/* Mobile cards */}
           <div className="px-4 py-4">
@@ -315,7 +421,6 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                 onToggleSelect={() => toggleSelect(lead.id)}
                 onEdit={() => handleEditLead(lead)}
                 onDelete={() => handleDeleteSingle(lead.id)}
-                onCheckPlatforms={setAdPlatformLeadId}
               />
             ))}
           </div>
@@ -340,15 +445,6 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
           selectedLeadIds={storeSelectedLeads}
         />
         
-        <AdPlatformModal
-          open={showAdPlatformModal}
-          onClose={() => {
-            setShowAdPlatformModal(false);
-            setAdPlatformLeadId(null);
-          }}
-          selectedLeadIds={adPlatformLeadId ? [adPlatformLeadId] : []}
-        />
-        
         <AdViewerModal
           open={showAdViewerModal}
           onClose={() => {
@@ -364,7 +460,6 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
           onAddLead={() => {}}
           onBulkEdit={() => setShowBulkEditModal(true)}
           onExport={() => {}}
-          onCheckPlatforms={() => setShowAdPlatformModal(true)}
         />
       </>
     );
@@ -373,15 +468,34 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
   // Table view (Desktop and Mobile when selected)
   return (
     <>
-      <div className={`bg-white shadow-sm relative z-0 overflow-hidden ${isMobile ? 'mobile-table' : ''}`}>
-        {/* Bulk operations bar */}
-        <BulkOperationsBar
+      <div className={`bg-white shadow-sm relative z-0 overflow-hidden mr-4 ${isMobile ? 'mobile-table' : ''}`}>
+        {/* New imports filter banner */}
+        {showOnlyNewImports && newlyImportedLeads.length > 0 && (
+          <div className="bg-green-50 border-b border-green-200 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center">
+              <svg className="h-5 w-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              <span className="text-sm font-medium text-green-800">
+                Showing {newlyImportedLeads.length} newly imported lead{newlyImportedLeads.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <button
+              onClick={() => setShowOnlyNewImports(false)}
+              className="text-sm text-green-600 hover:text-green-800 font-medium"
+            >
+              Clear Filter
+            </button>
+          </div>
+        )}
+        
+        {/* Bulk operations bar - Disabled */}
+        {/* <BulkOperationsBar
           selectedCount={storeSelectedLeads.length}
           onBulkEdit={() => setShowBulkEditModal(true)}
           onExport={() => {}}
-          onCheckPlatforms={() => setShowAdPlatformModal(true)}
           onClearSelection={() => setSelectedLeads([])}
-        />
+        /> */}
         
         {storeSelectedLeads.length > 0 && false && (
           <div className="bg-gray-50 px-3 py-2 flex items-center justify-between">
@@ -414,7 +528,10 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
           <table ref={tableRef} className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50 sticky top-0 z-50 shadow-sm">
               <tr>
-                <th className="px-2 sm:px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide sticky left-0 z-10 bg-gray-50 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 min-w-[44px]">
+                <th className="px-1 py-2 text-center text-xs font-medium text-gray-400 uppercase tracking-wide sticky left-0 z-10 bg-gray-50 border-r border-gray-200 w-10">
+                  #
+                </th>
+                <th className="px-2 sm:px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide sticky left-[40px] z-10 bg-gray-50 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 min-w-[44px]">
                   <input
                     type="checkbox"
                     checked={storeSelectedLeads.length === sortedLeads.length && sortedLeads.length > 0}
@@ -422,41 +539,24 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                   />
                 </th>
-                {activeColumns.handle && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
-                    Handle
-                  </th>
-                )}
                 {activeColumns.company && (
-                  <ResizableColumn
-                    className={`px-2 sm:px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 sticky z-10 bg-gray-50 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 min-w-[150px]`}
-                    minWidth={150}
-                    maxWidth={400}
-                    style={{ left: '44px' }}
-                  >
-                    <div className="flex items-center gap-1" onClick={() => handleSort('company_name')}>
-                      Company
-                      {sortField === 'company_name' && (
-                        sortDirection === 'asc' ? 
-                          <ChevronUpIcon className="h-3 w-3" /> : 
-                          <ChevronDownIcon className="h-3 w-3" />
-                      )}
-                    </div>
-                  </ResizableColumn>
+                                <th
+                className={`px-2 sm:px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 sticky z-10 bg-gray-50 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 w-[320px] min-w-[320px] max-w-[320px]`}
+                style={{ left: 'calc(40px + 44px)' }}
+              >
+                <div className="flex items-center gap-1" onClick={() => handleSort('company_name')}>
+                  Company
+                  {sortField === 'company_name' && (
+                    sortDirection === 'asc' ?
+                      <ChevronUpIcon className="h-3 w-3" /> :
+                      <ChevronDownIcon className="h-3 w-3" />
+                  )}
+                </div>
+              </th>
                 )}
-                {activeColumns.type && (
-                  <th 
-                    className={`px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 ${!activeColumns.handle ? 'pl-6' : ''}`}
-                    onClick={() => handleSort('service_type')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Type
-                      {sortField === 'service_type' && (
-                        sortDirection === 'asc' ? 
-                          <ChevronUpIcon className="h-3 w-3" /> : 
-                          <ChevronDownIcon className="h-3 w-3" />
-                      )}
-                    </div>
+                {activeColumns.links && (
+                  <th className={`px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide w-[100px] min-w-[100px] ${isMobile ? 'hide-on-mobile' : ''}`}>
+                    Links
                   </th>
                 )}
                 {activeColumns.city && (
@@ -474,6 +574,11 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                     </div>
                   </th>
                 )}
+                {activeColumns.state && (
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                    State
+                  </th>
+                )}
                 {activeColumns.phone && (
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
                     Phone
@@ -484,14 +589,34 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                     Email
                   </th>
                 )}
+                {activeColumns.handle && (
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                    Handle
+                  </th>
+                )}
+                {activeColumns.additionalEmails && (
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                    Additional Emails
+                  </th>
+                )}
+                {activeColumns.address && (
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                    Address
+                  </th>
+                )}
                 {activeColumns.rating && (
                   <th className={`px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide ${isMobile ? 'hide-on-mobile' : ''}`}>
                     Rating
                   </th>
                 )}
-                {activeColumns.links && (
-                  <th className={`px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide ${isMobile ? 'hide-on-mobile' : ''}`}>
-                    Links
+                {activeColumns.reviewCount && (
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                    Reviews
+                  </th>
+                )}
+                {activeColumns.score && (
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                    Score
                   </th>
                 )}
                 {activeColumns.source && (
@@ -509,9 +634,34 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                     Ad Platforms
                   </th>
                 )}
-                {activeColumns.notes && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
-                    Notes
+                {activeColumns.type && (
+                  <th 
+                    className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('service_type')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Type
+                      {sortField === 'service_type' && (
+                        sortDirection === 'asc' ? 
+                          <ChevronUpIcon className="h-3 w-3" /> : 
+                          <ChevronDownIcon className="h-3 w-3" />
+                      )}
+                    </div>
+                  </th>
+                )}
+                {activeColumns.searchQuery && (
+                  <th 
+                    className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100"
+                    onClick={() => handleSort('search_query')}
+                  >
+                    <div className="flex items-center gap-1">
+                      Search Query
+                      {sortField === 'search_query' && (
+                        sortDirection === 'asc' ? 
+                          <ChevronUpIcon className="h-3 w-3" /> : 
+                          <ChevronDownIcon className="h-3 w-3" />
+                      )}
+                    </div>
                   </th>
                 )}
                 {activeColumns.close && (
@@ -533,14 +683,11 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                   lead={lead} 
                   selected={storeSelectedLeads.includes(lead.id)}
                   activeColumns={activeColumns}
-                  index={index}
+                  index={startIndex + index}
+                  isNewlyImported={newlyImportedLeads.includes(lead.id)}
                   onToggleSelect={() => toggleSelect(lead.id)}
                   onDelete={() => handleDeleteSingle(lead.id)}
                   onEdit={() => handleEditLead(lead)}
-                  onCheckPlatforms={(leadId) => {
-                    setAdPlatformLeadId(leadId);
-                    setShowAdPlatformModal(true);
-                  }}
                   onViewAds={(lead) => {
                     setAdViewerLead(lead);
                     setShowAdViewerModal(true);
@@ -571,15 +718,6 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
         selectedLeadIds={storeSelectedLeads}
       />
       
-      <AdPlatformModal
-        open={showAdPlatformModal}
-        onClose={() => {
-          setShowAdPlatformModal(false);
-          setAdPlatformLeadId(null);
-        }}
-        selectedLeadIds={adPlatformLeadId ? [adPlatformLeadId] : []}
-      />
-      
       <AdViewerModal
         open={showAdViewerModal}
         onClose={() => {
@@ -595,7 +733,12 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
         onAddLead={() => {}}
         onBulkEdit={() => setShowBulkEditModal(true)}
         onExport={() => {}}
-        onCheckPlatforms={() => setShowAdPlatformModal(true)}
+        onShowImportHistory={() => setShowImportHistoryModal(true)}
+      />
+      
+      <ImportHistoryModal
+        open={showImportHistoryModal}
+        onClose={() => setShowImportHistoryModal(false)}
       />
     </>
   );
@@ -605,31 +748,37 @@ interface LeadRowProps {
   lead: Lead;
   selected: boolean;
   index: number;
+  isNewlyImported?: boolean;
   activeColumns: {
     handle: boolean;
     company: boolean;
     type: boolean;
+    searchQuery: boolean;
     city: boolean;
+    state: boolean;
     phone: boolean;
     email: boolean;
+    additionalEmails: boolean;
+    address: boolean;
     rating: boolean;
+    reviewCount: boolean;
+    score: boolean;
     links: boolean;
     source: boolean;
     ads: boolean;
     adPlatforms: boolean;
-    notes: boolean;
     close: boolean;
     actions: boolean;
   };
   onToggleSelect: () => void;
   onDelete: () => void;
   onEdit: () => void;
-  onCheckPlatforms: (leadId: string) => void;
   onViewAds: (lead: Lead) => void;
   isMobile?: boolean;
+  style?: React.CSSProperties;
 }
 
-function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelete, onEdit, onCheckPlatforms, onViewAds, isMobile = false }: LeadRowProps) {
+export function LeadRow({ lead, selected, index, isNewlyImported = false, activeColumns, onToggleSelect, onDelete, onEdit, onViewAds, isMobile = false, style }: LeadRowProps) {
   const { updateLead } = useLeadStore();
   // Check for multi-source presence
   const hasMultipleSources = 
@@ -656,7 +805,8 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
     const sourceBadges = {
       'Google Maps': { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200', icon: '📍' },
       'FB Ad Library': { bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200', icon: '📘' },
-      'Instagram Manual': { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200', icon: '📷' }
+      'Instagram Manual': { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200', icon: '📷' },
+      'CSV Import': { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200', icon: '📄' }
     };
     
     const badge = sourceBadges[lead.lead_source as keyof typeof sourceBadges];
@@ -674,8 +824,15 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
   const getCompanyDisplay = () => {
     return (
       <div className="max-w-[250px]">
-        <div className="text-sm font-medium text-gray-900 truncate" title={lead.company_name || undefined}>
-          {lead.company_name}
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-medium text-gray-900 truncate" title={lead.company_name || undefined}>
+            {lead.company_name}
+          </div>
+          {isNewlyImported && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-500 text-white animate-pulse">
+              NEW
+            </span>
+          )}
         </div>
         {hasMultipleSources && (
           <div className="text-xs text-gray-500 mt-0.5 truncate">
@@ -687,14 +844,25 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
   };
 
   return (
-    <tr className={`
-      group transition-colors duration-150 cursor-pointer
-      ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}
-      ${hasMultipleSources ? 'bg-gradient-to-r from-blue-50/30 to-purple-50/30' : ''}
-      hover:bg-blue-50 hover:shadow-sm
-      ${selected ? 'bg-blue-100 hover:bg-blue-200' : ''}
-    `}>
-      <td className={`px-2 sm:px-3 py-2 whitespace-nowrap sticky left-0 z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 transition-colors duration-150 min-w-[44px]
+    <tr 
+      id={`lead-row-${lead.id}`}
+      data-lead-id={lead.id}
+      className={`
+        group transition-all duration-150 cursor-pointer relative
+        ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}
+        ${hasMultipleSources ? 'bg-gradient-to-r from-blue-50/30 to-purple-50/30' : ''}
+        hover:bg-blue-50 hover:shadow-sm
+        ${selected ? 'bg-blue-100 hover:bg-blue-200' : ''}
+        ${isNewlyImported ? 'newly-imported bg-green-50/70 ring-2 ring-green-400' : ''}
+      `}
+      style={style}>
+      <td className={`px-1 py-2 text-center text-xs text-gray-400 sticky left-0 z-10 border-r border-gray-200 transition-colors duration-150 w-10
+        ${selected ? 'bg-blue-100' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+        group-hover:bg-blue-50 ${selected ? 'group-hover:bg-blue-200' : ''}
+      `}>
+        {index + 1}
+      </td>
+      <td className={`px-2 sm:px-3 py-2 whitespace-nowrap sticky left-[40px] z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 transition-colors duration-150 min-w-[44px]
         ${selected ? 'bg-blue-100' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
         group-hover:bg-blue-50 ${selected ? 'group-hover:bg-blue-200' : ''}
       `}>
@@ -706,100 +874,22 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
           className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
         />
       </td>
-      {activeColumns.handle && (
-        <td className="px-3 py-2 text-xs text-gray-900">
-          <InlineEditableCell
-            lead={lead}
-            field="handle"
-            value={lead.handle}
-            onUpdate={updateLead}
-            className="max-w-[200px] truncate"
-            placeholder="Add handle..."
-          />
-        </td>
-      )}
       {activeColumns.company && (
-        <td className={`px-2 sm:px-3 py-2 cursor-pointer sticky z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 transition-colors duration-150 min-w-[150px]
-          ${selected ? 'bg-blue-100' : hasMultipleSources ? 'bg-gradient-to-r from-blue-50 to-purple-50' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-          group-hover:bg-blue-50 ${selected ? 'group-hover:bg-blue-200' : ''}
-        `} 
-        style={{ left: '44px' }}
-        onClick={onEdit}>
-          {getCompanyDisplay()}
-        </td>
-      )}
-      {activeColumns.type && (
-        <td className={`px-3 py-2 text-xs text-gray-500 cursor-pointer ${!activeColumns.handle ? 'pl-6' : ''}`} onClick={onEdit}>
-          <div className="relative group max-w-[180px]">
-            <span className="truncate block" title={lead.service_type || undefined}>
-              {lead.service_type}
-            </span>
-            {lead.service_type && getCategoryForBusiness(lead.service_type) && (
-              <div className="absolute z-10 hidden group-hover:block bottom-full left-0 mb-1 p-2 bg-gray-900 text-white text-xs rounded shadow-lg w-64">
-                <div className="font-semibold">{getCategoryForBusiness(lead.service_type)?.tier}</div>
-                <div>{getCategoryForBusiness(lead.service_type)?.category}</div>
-                <div className="text-gray-300 mt-1">{getCategoryForBusiness(lead.service_type)?.description}</div>
-                <div className="text-yellow-300 mt-1">Acquisition Score: {getCategoryForBusiness(lead.service_type)?.acquisitionScore}/10</div>
-              </div>
-            )}
-          </div>
-        </td>
-      )}
-      {activeColumns.city && (
-        <td className="px-3 py-2 text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
-          <div className="max-w-[150px] truncate" title={lead.city || undefined}>
-            {lead.city}
-          </div>
-        </td>
-      )}
-      {activeColumns.phone && (
-        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
-          <InlineEditableCell
-            lead={lead}
-            field="phone"
-            value={lead.phone}
-            onUpdate={updateLead}
-            type="tel"
-            placeholder="Add phone..."
-          />
-        </td>
-      )}
-      {activeColumns.email && (
-        <td className="px-3 py-2 text-xs text-gray-500">
-          <InlineEditableCell
-            lead={lead}
-            field="email"
-            value={lead.email}
-            onUpdate={updateLead}
-            type="email"
-            className="max-w-[220px]"
-            placeholder="Add email..."
-          />
-          {(lead.email2 || lead.email3) && (
-            <span className="text-gray-400 text-xs ml-1">
-              +{[lead.email2, lead.email3].filter(Boolean).length} more
-            </span>
-          )}
-        </td>
-      )}
-      {activeColumns.rating && (
-        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
-          {lead.rating ? (
-            <div className="flex items-center">
-              <span>{lead.rating}</span>
-              <span className="text-yellow-500 ml-1">⭐</span>
-              {lead.review_count && (
-                <span className="text-gray-400 ml-1">({lead.review_count})</span>
-              )}
-            </div>
-          ) : (
-            <span className="text-gray-400">-</span>
-          )}
-        </td>
+                    <td className={`px-2 sm:px-3 py-2 cursor-pointer sticky z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 transition-colors duration-150 w-[320px] min-w-[320px] max-w-[320px]
+              ${selected ? 'bg-blue-100' : hasMultipleSources ? 'bg-gradient-to-r from-blue-50 to-purple-50' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+              group-hover:bg-blue-50 ${selected ? 'group-hover:bg-blue-200' : ''}
+            `}
+            style={{ left: 'calc(40px + 44px)' }}
+            onClick={onEdit}>
+              <div className="truncate pr-2">{getCompanyDisplay()}</div>
+            </td>
       )}
       {activeColumns.links && (
-        <td className="px-3 py-2 whitespace-nowrap text-sm">
-          <div className="flex gap-2">
+        <td className={`px-2 py-2 whitespace-nowrap text-sm w-[100px] min-w-[100px]
+          ${selected ? 'bg-blue-100' : hasMultipleSources ? 'bg-gradient-to-r from-blue-50 to-purple-50' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
+          group-hover:bg-blue-50 ${selected ? 'group-hover:bg-blue-200' : ''}
+        `}>
+          <div className="flex gap-1 flex-wrap justify-start">
             {lead.instagram_url && (
               <a href={lead.instagram_url} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:text-pink-800" title="Instagram" onClick={(e) => e.stopPropagation()}>
                 📸
@@ -833,6 +923,144 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
           </div>
         </td>
       )}
+            {activeColumns.city && (
+        <td className="px-3 py-2 text-xs text-gray-500 cursor-pointer"
+            onClick={onEdit}>
+          <div className="max-w-[150px] truncate" title={lead.city || undefined}>
+            {lead.city}
+          </div>
+        </td>
+      )}
+      {activeColumns.state && (
+        <td className="px-3 py-2 text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
+          <div className="max-w-[50px] truncate" title={lead.state || undefined}>
+            {lead.state || '-'}
+          </div>
+        </td>
+      )}
+      {activeColumns.phone && (
+        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
+          <InlineEditableCell
+            lead={lead}
+            field="phone"
+            value={lead.phone}
+            onUpdate={updateLead}
+            type="tel"
+            placeholder="Add phone..."
+          />
+        </td>
+      )}
+      {activeColumns.email && (
+        <td className="px-3 py-2 text-xs text-gray-500">
+          <InlineEditableCell
+            lead={lead}
+            field="email"
+            value={lead.email}
+            onUpdate={updateLead}
+            type="email"
+            className="max-w-[220px]"
+            placeholder="Add email..."
+          />
+          {(lead.email2 || lead.email3) && (
+            <span className="text-gray-400 text-xs ml-1">
+              +{[lead.email2, lead.email3].filter(Boolean).length} more
+            </span>
+          )}
+        </td>
+      )}
+      {activeColumns.handle && (
+        <td className="px-3 py-2 text-xs text-gray-900">
+          <InlineEditableCell
+            lead={lead}
+            field="handle"
+            value={lead.handle}
+            onUpdate={updateLead}
+            className="max-w-[200px] truncate"
+            placeholder="Add handle..."
+          />
+        </td>
+      )}
+      {activeColumns.additionalEmails && (
+        <td className="px-3 py-2 text-xs text-gray-500">
+          <div className="space-y-1">
+            {lead.email2 && (
+              <InlineEditableCell
+                lead={lead}
+                field="email2"
+                value={lead.email2}
+                onUpdate={updateLead}
+                type="email"
+                className="max-w-[220px]"
+                placeholder="Add email 2..."
+              />
+            )}
+            {lead.email3 && (
+              <InlineEditableCell
+                lead={lead}
+                field="email3"
+                value={lead.email3}
+                onUpdate={updateLead}
+                type="email"
+                className="max-w-[220px]"
+                placeholder="Add email 3..."
+              />
+            )}
+            {!lead.email2 && !lead.email3 && (
+              <span className="text-gray-400">-</span>
+            )}
+          </div>
+        </td>
+      )}
+      {activeColumns.address && (
+        <td className="px-3 py-2 text-xs text-gray-500">
+          <InlineEditableCell
+            lead={lead}
+            field="address"
+            value={lead.address || lead.full_address}
+            onUpdate={updateLead}
+            className="max-w-[250px] truncate"
+            placeholder="Add address..."
+          />
+        </td>
+      )}
+      {activeColumns.rating && (
+        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
+          {lead.rating ? (
+            <div className="flex items-center">
+              <span>{lead.rating}</span>
+              <span className="text-yellow-500 ml-1">⭐</span>
+            </div>
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
+        </td>
+      )}
+      {activeColumns.reviewCount && (
+        <td className="px-3 py-2 text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
+          {lead.review_count !== null && lead.review_count !== undefined ? (
+            <span>{lead.review_count}</span>
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
+        </td>
+      )}
+      {activeColumns.score && (
+        <td className="px-3 py-2 text-xs cursor-pointer" onClick={onEdit}>
+          {lead.score ? (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+              lead.score === 'A++' ? 'bg-green-100 text-green-800' :
+              lead.score === 'A+' ? 'bg-green-100 text-green-800' :
+              lead.score === 'A' ? 'bg-blue-100 text-blue-800' :
+              lead.score === 'B' ? 'bg-yellow-100 text-yellow-800' :
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {lead.score}
+            </span>
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
+        </td>
+      )}
       {activeColumns.source && (
         <td className={`px-3 py-2 whitespace-nowrap text-xs text-gray-500 cursor-pointer ${isMobile ? 'hide-on-mobile' : ''}`} onClick={onEdit}>
           {getSourceBadge()}
@@ -853,16 +1081,34 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
           />
         </td>
       )}
-      {activeColumns.notes && (
-        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
-          <InlineEditableCell
-            lead={lead}
-            field="notes"
-            value={lead.notes}
-            onUpdate={updateLead}
-            className="max-w-[200px] truncate"
-            placeholder="Add notes..."
-          />
+      {activeColumns.type && (
+        <td className={`px-3 py-2 text-xs text-gray-500 cursor-pointer ${!activeColumns.handle ? 'pl-6' : ''}`} onClick={onEdit}>
+          <div className="relative group max-w-[180px]">
+            <span className="truncate block" title={(lead.normalized_service_type || lead.service_type) || undefined}>
+              {lead.normalized_service_type || lead.service_type}
+            </span>
+            {(() => {
+              const serviceType = lead.normalized_service_type || lead.service_type;
+              if (!serviceType) return null;
+              const category = getCategoryForBusiness(serviceType);
+              if (!category) return null;
+              return (
+                <div className="absolute z-10 hidden group-hover:block bottom-full left-0 mb-1 p-2 bg-gray-900 text-white text-xs rounded shadow-lg w-64">
+                  <div className="font-semibold">{category.tier}</div>
+                  <div>{category.category}</div>
+                  <div className="text-gray-300 mt-1">{category.description}</div>
+                  <div className="text-yellow-300 mt-1">Acquisition Score: {category.acquisitionScore}/10</div>
+                </div>
+              );
+            })()}
+          </div>
+        </td>
+      )}
+      {activeColumns.searchQuery && (
+        <td className="px-3 py-2 text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
+          <div className="max-w-[200px] truncate" title={lead.search_query || undefined}>
+            {lead.search_query || '-'}
+          </div>
         </td>
       )}
       {activeColumns.close && (
@@ -903,28 +1149,13 @@ function LeadRow({ lead, selected, index, activeColumns, onToggleSelect, onDelet
                           e.stopPropagation();
                           onEdit();
                         }}
+                        data-action="edit"
                         className={`${
                           active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
                         } group flex items-center px-4 py-2 text-sm w-full text-left`}
                       >
                         <PencilSquareIcon className="mr-3 h-4 w-4" />
                         Edit Lead
-                      </button>
-                    )}
-                  </Menu.Item>
-                  <Menu.Item>
-                    {({ active }) => (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onCheckPlatforms(lead.id);
-                        }}
-                        className={`${
-                          active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
-                        } group flex items-center px-4 py-2 text-sm w-full text-left`}
-                      >
-                        <GlobeAltIcon className="mr-3 h-4 w-4" />
-                        Check Ad Platforms
                       </button>
                     )}
                   </Menu.Item>

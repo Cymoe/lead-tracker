@@ -174,31 +174,31 @@ export default function ServiceTypeAutocomplete({
             setIsDropdownButtonClick(true);
           }}
           onClick={handleDropdownClick}
-          className="absolute right-0 top-0 bottom-0 px-3 flex items-center text-gray-400 hover:text-gray-600"
+          className="absolute right-0 top-0 bottom-0 px-3 flex items-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
         >
           <ChevronDownIcon className="h-5 w-5" />
         </button>
       </div>
       
       {showDropdown && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto">
           {showAllCategories === true ? (
             // Show all services organized by category
             <>
-              <div className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50 border-b">
+              <div className="px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
                 Select a Service Type
               </div>
               {console.log('Rendering dropdown - showAllCategories:', showAllCategories, 'type:', typeof showAllCategories, 'categories length:', SERVICE_CATEGORIES?.length)}
               {SERVICE_CATEGORIES && SERVICE_CATEGORIES.length > 0 ? (
                 SERVICE_CATEGORIES.map((category, categoryIndex) => (
                 <div key={categoryIndex}>
-                  <div className="px-3 py-2 text-xs font-semibold text-gray-500 bg-gray-50 sticky top-0">
+                  <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 sticky top-0">
                     {category.category}
                   </div>
                   {category.services.map((service, serviceIndex) => (
                     <div
                       key={`${categoryIndex}-${serviceIndex}`}
-                      className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                      className="px-3 py-2 cursor-pointer text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                       onClick={() => {
                         handleSelectSuggestion(service);
                         setShowAllCategories(false);
@@ -210,26 +210,26 @@ export default function ServiceTypeAutocomplete({
                 </div>
               ))
               ) : (
-                <div className="px-3 py-2 text-gray-500">No categories available</div>
+                <div className="px-3 py-2 text-gray-500 dark:text-gray-400">No categories available</div>
               )}
             </>
           ) : (
             // Show search suggestions
             <>
               {searchTerm.length === 0 && recentServices.length > 0 && (
-                <div className="px-3 py-1 text-xs font-semibold text-gray-500 bg-gray-50">
+                <div className="px-3 py-1 text-xs font-semibold text-gray-500 dark:text-gray-300 bg-gray-50 dark:bg-gray-700">
                   Recent Services
                 </div>
               )}
               
               {searchTerm.length === 0 && recentServices.length === 0 && (
-                <div className="px-3 py-1 text-xs font-semibold text-gray-500 bg-gray-50">
+                <div className="px-3 py-1 text-xs font-semibold text-gray-500 dark:text-gray-300 bg-gray-50 dark:bg-gray-700">
                   Popular Services
                 </div>
               )}
               
               {searchTerm.length > 0 && (
-                <div className="px-3 py-1 text-xs font-semibold text-gray-500 bg-gray-50">
+                <div className="px-3 py-1 text-xs font-semibold text-gray-500 dark:text-gray-300 bg-gray-50 dark:bg-gray-700">
                   Suggestions
                 </div>
               )}
@@ -237,11 +237,11 @@ export default function ServiceTypeAutocomplete({
               {suggestions.map((suggestion, index) => (
                 <div
                   key={index}
-                  className="px-3 py-2 cursor-pointer hover:bg-gray-100"
+                  className="px-3 py-2 cursor-pointer text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                   onClick={() => handleSelectSuggestion(suggestion)}
                 >
                   {suggestion.includes('(custom service type)') ? (
-                    <span className="text-gray-600 italic">{suggestion}</span>
+                    <span className="text-gray-600 dark:text-gray-400 italic">{suggestion}</span>
                   ) : (
                     <span>{suggestion}</span>
                   )}
@@ -249,7 +249,7 @@ export default function ServiceTypeAutocomplete({
               ))}
               
               {searchTerm.length > 0 && (
-                <div className="px-3 py-1 text-xs text-gray-500 border-t bg-gray-50">
+                <div className="px-3 py-1 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">
                   Press Enter to use "{searchTerm}" as is
                 </div>
               )}

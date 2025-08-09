@@ -67,7 +67,7 @@ export type Database = {
           search_query: string | null
           rating: number | null
           review_count: number | null
-          lead_source: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | null
+          lead_source: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | 'CSV Import' | null
           running_ads: boolean
           ad_start_date: string | null
           ad_copy: string | null
@@ -83,6 +83,7 @@ export type Database = {
           notes: string | null
           score: 'A++' | 'A+' | 'A' | 'B' | 'C' | null
           close_crm_id: string | null
+          import_operation_id: string | null
           created_at: string
           updated_at: string
         }
@@ -109,7 +110,7 @@ export type Database = {
           search_query?: string | null
           rating?: number | null
           review_count?: number | null
-          lead_source?: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | null
+          lead_source?: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | 'CSV Import' | null
           running_ads?: boolean
           ad_start_date?: string | null
           ad_copy?: string | null
@@ -125,6 +126,7 @@ export type Database = {
           notes?: string | null
           score?: 'A++' | 'A+' | 'A' | 'B' | 'C' | null
           close_crm_id?: string | null
+          import_operation_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -151,7 +153,7 @@ export type Database = {
           search_query?: string | null
           rating?: number | null
           review_count?: number | null
-          lead_source?: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | null
+          lead_source?: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | 'CSV Import' | null
           running_ads?: boolean
           ad_start_date?: string | null
           ad_copy?: string | null
@@ -167,6 +169,7 @@ export type Database = {
           notes?: string | null
           score?: 'A++' | 'A+' | 'A' | 'B' | 'C' | null
           close_crm_id?: string | null
+          import_operation_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -264,6 +267,13 @@ export type Database = {
           cost_estimate: Json | null
           created_at: string
           expires_at: string
+          apify_run_id: string | null
+          import_status: string | null
+          import_started_at: string | null
+          import_completed_at: string | null
+          leads_imported: number | null
+          import_error: string | null
+          import_operation_id: string | null
         }
         Insert: {
           id?: string
@@ -276,6 +286,13 @@ export type Database = {
           cost_estimate?: Json | null
           created_at?: string
           expires_at: string
+          apify_run_id?: string | null
+          import_status?: string | null
+          import_started_at?: string | null
+          import_completed_at?: string | null
+          leads_imported?: number | null
+          import_error?: string | null
+          import_operation_id?: string | null
         }
         Update: {
           id?: string
@@ -288,6 +305,48 @@ export type Database = {
           cost_estimate?: Json | null
           created_at?: string
           expires_at?: string
+          apify_run_id?: string | null
+          import_status?: string | null
+          import_started_at?: string | null
+          import_completed_at?: string | null
+          leads_imported?: number | null
+          import_error?: string | null
+          import_operation_id?: string | null
+        }
+      }
+      import_operations: {
+        Row: {
+          id: string
+          user_id: string
+          operation_type: 'bulk_import' | 'csv_import' | 'google_maps_import' | 'manual_add'
+          source: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | 'CSV Import'
+          lead_count: number
+          metadata: Json
+          created_at: string
+          reverted_at: string | null
+          reverted_by: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          operation_type: 'bulk_import' | 'csv_import' | 'google_maps_import' | 'manual_add'
+          source: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | 'CSV Import'
+          lead_count?: number
+          metadata?: Json
+          created_at?: string
+          reverted_at?: string | null
+          reverted_by?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          operation_type?: 'bulk_import' | 'csv_import' | 'google_maps_import' | 'manual_add'
+          source?: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | 'CSV Import'
+          lead_count?: number
+          metadata?: Json
+          created_at?: string
+          reverted_at?: string | null
+          reverted_by?: string | null
         }
       }
     }

@@ -14,8 +14,9 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MapIcon,
-  GlobeAltIcon,
   UserGroupIcon,
+  GlobeAltIcon,
+  ViewColumnsIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLeadStore } from '@/lib/store';
@@ -28,7 +29,6 @@ interface SidebarProps {
   onAnalytics: () => void;
   onSettings: () => void;
   onBulkEdit: () => void;
-  onAdPlatformCheck?: () => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
 }
@@ -40,7 +40,6 @@ export default function Sidebar({
   onAnalytics,
   onSettings,
   onBulkEdit,
-  onAdPlatformCheck,
   isCollapsed = false,
   onToggleCollapse,
 }: SidebarProps) {
@@ -72,7 +71,8 @@ export default function Sidebar({
   const navigation = [
     { name: 'Dashboard', icon: HomeIcon, current: currentPath === '/dashboard', onClick: () => router.push('/dashboard') },
     { name: 'Leads', icon: UserGroupIcon, current: currentPath === '/leads', onClick: () => router.push('/leads') },
-    { name: 'Market Analysis', icon: MapIcon, current: currentPath === '/market-analysis', onClick: () => router.push('/market-analysis') },
+    { name: 'Market Workflow', icon: ViewColumnsIcon, current: currentPath === '/market-workflow', onClick: () => router.push('/market-workflow') },
+    { name: 'Market Insights', icon: MapIcon, current: currentPath === '/market-insights', onClick: () => router.push('/market-insights') },
     { name: 'Analytics', icon: ChartBarIcon, current: currentPath === '/analytics', onClick: () => router.push('/analytics') },
   ];
 
@@ -83,7 +83,6 @@ export default function Sidebar({
   const tools = [
     { name: 'Find Duplicates', icon: MagnifyingGlassCircleIcon, onClick: onDuplicateDetection },
     { name: 'Sync to Sheets', icon: ArrowsRightLeftIcon, onClick: onGoogleSheetsSync },
-    { name: 'Scan Ad Platforms', icon: GlobeAltIcon, onClick: onAdPlatformCheck || (() => {}) },
     ...(selectedLeads.length > 0 ? [
       { name: `Edit ${selectedLeads.length} Selected`, icon: PencilSquareIcon, onClick: onBulkEdit },
     ] : []),
@@ -152,13 +151,13 @@ export default function Sidebar({
                                 onClick={() => handleItemClick(item.onClick)}
                                 className={`${
                                   item.current
-                                    ? 'bg-blue-600 text-white'
+                                    ? 'bg-yellow-500 text-gray-900'
                                     : 'text-gray-300 hover:text-white hover:bg-gray-800'
                                 } group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold w-full`}
                               >
                                 <item.icon
                                   className={`${
-                                    item.current ? 'text-gray-900' : 'text-gray-500 group-hover:text-gray-700'
+                                    item.current ? 'text-gray-900' : 'text-gray-400 group-hover:text-white'
                                   } h-6 w-6 shrink-0`}
                                   aria-hidden="true"
                                 />
@@ -246,20 +245,24 @@ export default function Sidebar({
       </Transition.Root>
 
       {/* Static sidebar for desktop */}
-      <div className={`hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:flex-col transition-all duration-300 ${
+      <div className={`hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:flex-col ${
         isCollapsed ? 'lg:w-16' : 'lg:w-56'
       }`}>
         <div className={`flex grow flex-col gap-y-3 overflow-y-auto overflow-x-hidden border-r border-gray-200 bg-white pb-3 ${
           isCollapsed ? 'px-1.5' : 'px-3'
         }`}>
           <div className="flex h-12 shrink-0 items-center justify-between">
-            {showText && <h1 className="text-sm font-semibold text-gray-200 transition-opacity duration-200">Lead Tracker</h1>}
+            {showText && <h1 className="text-sm font-semibold text-gray-200">Lead Tracker</h1>}
             {isCollapsed && <span className="text-base mx-auto">🎯</span>}
             <button
-              onClick={onToggleCollapse}
+              onClick={() => {
+                onToggleCollapse?.();
+                // Emit custom event for AppLayout to listen to
+                window.dispatchEvent(new Event('sidebarToggled'));
+              }}
               className={`${
                 isCollapsed ? 'mx-auto' : 'ml-auto'
-              } p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors`}
+              } p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600`}
               aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {isCollapsed ? (

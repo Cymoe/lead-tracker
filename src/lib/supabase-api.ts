@@ -1,19 +1,21 @@
 import { createClient } from './supabase/client';
 import { Lead } from '@/types';
 import { Database } from './supabase/database.types';
+import { normalizeServiceType } from '@/utils/service-type-normalization';
 
 type DbLead = Database['public']['Tables']['leads']['Row'];
 type DbLeadInsert = Database['public']['Tables']['leads']['Insert'];
 type DbLeadUpdate = Database['public']['Tables']['leads']['Update'];
 
 // Convert database lead to app format
-function dbToAppLead(dbLead: DbLead): Lead {
+export function dbToAppLead(dbLead: DbLead): Lead {
   return {
     id: dbLead.id,
     user_id: dbLead.user_id,
     handle: dbLead.handle,
     company_name: dbLead.company_name,
     service_type: dbLead.service_type,
+    // normalized_service_type will be calculated on the fly
     city: dbLead.city,
     state: dbLead.state,
     phone: dbLead.phone,
@@ -35,18 +37,11 @@ function dbToAppLead(dbLead: DbLead): Lead {
     running_ads: dbLead.running_ads,
     ad_start_date: dbLead.ad_start_date,
     ad_copy: dbLead.ad_copy,
-    ad_call_to_action: dbLead.ad_call_to_action,
-    service_areas: dbLead.service_areas,
-    price_info: dbLead.price_info,
     ad_platform: dbLead.ad_platform,
-    dm_sent: dbLead.dm_sent,
-    dm_response: dbLead.dm_response,
-    called: dbLead.called,
-    call_result: dbLead.call_result,
-    follow_up_date: dbLead.follow_up_date,
     notes: dbLead.notes,
     score: dbLead.score,
     close_crm_id: dbLead.close_crm_id,
+    import_operation_id: dbLead.import_operation_id,
     created_at: dbLead.created_at,
     updated_at: dbLead.updated_at,
   };
@@ -59,8 +54,10 @@ function appToDbLead(lead: Partial<Lead>, userId: string): DbLeadInsert {
     handle: lead.handle || null,
     company_name: lead.company_name!,
     service_type: lead.service_type || null,
-    city: lead.city || null,
-    state: lead.state || null,
+    // Don't save normalized_service_type to database - calculate on the fly
+    // Don't convert empty strings to null for city/state - preserve the value
+    city: lead.city === '' ? null : (lead.city || null),
+    state: lead.state === '' ? null : (lead.state || null),
     phone: lead.phone || null,
     email: lead.email || null,
     email2: lead.email2 || null,
@@ -80,46 +77,154 @@ function appToDbLead(lead: Partial<Lead>, userId: string): DbLeadInsert {
     running_ads: lead.running_ads ?? false,
     ad_start_date: lead.ad_start_date || null,
     ad_copy: lead.ad_copy || null,
-    ad_call_to_action: lead.ad_call_to_action || null,
-    service_areas: lead.service_areas || null,
-    price_info: lead.price_info || null,
     ad_platform: lead.ad_platform || null,
-    dm_sent: lead.dm_sent ?? false,
-    dm_response: lead.dm_response || null,
-    called: lead.called ?? false,
-    call_result: lead.call_result || null,
-    follow_up_date: lead.follow_up_date || null,
     notes: lead.notes || null,
     score: lead.score || null,
     close_crm_id: lead.close_crm_id || null,
+    import_operation_id: lead.import_operation_id || null,
   };
 }
 
-// Fetch all leads for the current user
-export async function fetchLeads(): Promise<Lead[]> {
+// Fetch leads with pagination
+export async function fetchLeadsPaginated(page: number = 0, pageSize: number = 100): Promise<{ leads: Lead[]; totalCount: number; hasMore: boolean }> {
   const supabase = createClient();
   
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
-  const { data, error } = await supabase
-    .from('leads')
-    .select('*')
-    .order('created_at', { ascending: false });
+  try {
+    // Get total count
+    const { count } = await supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+      
+    const totalCount = count || 0;
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    
+    // Fetch page of data
+    const { data, error } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
-  if (error) throw error;
+    if (error) throw error;
+    
+    const leads = (data || []).map(dbToAppLead);
+    const hasMore = to < totalCount - 1;
+    
+    console.log(`Fetched page ${page + 1}: ${leads.length} leads (total: ${totalCount})`);
+    
+    return { leads, totalCount, hasMore };
+  } catch (error) {
+    console.error('fetchLeadsPaginated error:', error);
+    throw error;
+  }
+}
+
+// Legacy function - only for CSV import
+export async function fetchLeads(limitToLoad?: number): Promise<Lead[]> {
+  const supabase = createClient();
   
-  return (data || []).map(dbToAppLead);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  try {
+    // First, get the total count
+    const { count } = await supabase
+      .from('leads')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+      
+    console.log(`Total leads in database: ${count}`);
+    
+    if (!count || count === 0) {
+      return [];
+    }
+
+    // Determine how many leads to load
+    const leadsToLoad = limitToLoad && limitToLoad < count ? limitToLoad : count;
+    const pageSize = 1000;
+    const totalPages = Math.ceil(leadsToLoad / pageSize);
+    
+    if (limitToLoad && limitToLoad < count) {
+      console.log(`Loading first ${leadsToLoad} of ${count} leads for performance...`);
+    } else {
+      console.log(`Fetching all ${count} leads in ${totalPages} parallel requests...`);
+    }
+    
+    // Create promises for all pages
+    const pagePromises: Promise<DbLead[]>[] = [];
+    
+    for (let page = 0; page < totalPages; page++) {
+      const from = page * pageSize;
+      const to = Math.min(from + pageSize - 1, leadsToLoad - 1);
+      
+      const pagePromise = Promise.resolve(
+        supabase
+          .from('leads')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .range(from, to)
+          .then(({ data, error }) => {
+            if (error) {
+              console.error(`Error fetching page ${page + 1}:`, error);
+              throw error;
+            }
+            console.log(`Fetched page ${page + 1}: ${data?.length || 0} leads`);
+            return (data || []) as DbLead[];
+          })
+      );
+        
+      pagePromises.push(pagePromise);
+    }
+    
+    // Fetch all pages in parallel
+    const allPages = await Promise.all(pagePromises);
+    
+    // Flatten all pages into a single array
+    const allLeads = allPages.flat();
+    
+    console.log(`Successfully fetched ${allLeads.length} leads`);
+    
+    // Store the total count for reference
+    if (limitToLoad && limitToLoad < count) {
+      (window as any).__totalLeadCount = count;
+    }
+    
+    return allLeads.map(dbToAppLead);
+  } catch (error) {
+    console.error('fetchLeads error:', error);
+    throw error;
+  }
 }
 
 // Save a new lead
-export async function saveLead(lead: Partial<Lead>): Promise<Lead> {
-  const supabase = createClient();
+export async function saveLead(lead: Partial<Lead>, supabase?: any, userId?: string): Promise<Lead> {
+  console.log('saveLead called with:', { hasSupabase: !!supabase, userId });
   
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  // If supabase client is not provided, create one (for client-side usage)
+  if (!supabase) {
+    console.log('Creating new supabase client in saveLead');
+    supabase = createClient();
+  }
+  
+  // If userId is not provided, get it from auth (for client-side usage)
+  let user_id = userId;
+  if (!user_id) {
+    console.log('Getting user from auth in saveLead');
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+    user_id = user.id;
+  }
+  
+  console.log('Using userId in saveLead:', user_id);
 
-  const dbLead = appToDbLead(lead, user.id);
+  const dbLead = appToDbLead(lead, user_id);
 
   const { data, error } = await supabase
     .from('leads')
@@ -130,6 +235,25 @@ export async function saveLead(lead: Partial<Lead>): Promise<Lead> {
   if (error) throw error;
   
   return dbToAppLead(data);
+}
+
+// Save multiple leads at once (batch insert)
+export async function saveLeadsBatch(leads: Partial<Lead>[]): Promise<Lead[]> {
+  const supabase = createClient();
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const dbLeads = leads.map(lead => appToDbLead(lead, user.id));
+
+  const { data, error } = await supabase
+    .from('leads')
+    .insert(dbLeads)
+    .select();
+
+  if (error) throw error;
+  
+  return (data || []).map(dbToAppLead);
 }
 
 // Update an existing lead
@@ -144,7 +268,10 @@ export async function updateLead(id: string, updates: Partial<Lead>): Promise<Le
   // Only include fields that are being updated
   if (updates.handle !== undefined) dbUpdate.handle = updates.handle;
   if (updates.company_name !== undefined) dbUpdate.company_name = updates.company_name;
-  if (updates.service_type !== undefined) dbUpdate.service_type = updates.service_type;
+  if (updates.service_type !== undefined) {
+    dbUpdate.service_type = updates.service_type;
+    // normalized_service_type is calculated on the fly, not stored
+  }
   if (updates.city !== undefined) dbUpdate.city = updates.city;
   if (updates.state !== undefined) dbUpdate.state = updates.state;
   if (updates.phone !== undefined) dbUpdate.phone = updates.phone;
@@ -159,15 +286,7 @@ export async function updateLead(id: string, updates: Partial<Lead>): Promise<Le
   if (updates.running_ads !== undefined) dbUpdate.running_ads = updates.running_ads;
   if (updates.ad_start_date !== undefined) dbUpdate.ad_start_date = updates.ad_start_date;
   if (updates.ad_copy !== undefined) dbUpdate.ad_copy = updates.ad_copy;
-  if (updates.ad_call_to_action !== undefined) dbUpdate.ad_call_to_action = updates.ad_call_to_action;
-  if (updates.service_areas !== undefined) dbUpdate.service_areas = updates.service_areas;
-  if (updates.price_info !== undefined) dbUpdate.price_info = updates.price_info;
   if (updates.ad_platform !== undefined) dbUpdate.ad_platform = updates.ad_platform;
-  if (updates.dm_sent !== undefined) dbUpdate.dm_sent = updates.dm_sent;
-  if (updates.dm_response !== undefined) dbUpdate.dm_response = updates.dm_response;
-  if (updates.called !== undefined) dbUpdate.called = updates.called;
-  if (updates.call_result !== undefined) dbUpdate.call_result = updates.call_result;
-  if (updates.follow_up_date !== undefined) dbUpdate.follow_up_date = updates.follow_up_date;
   if (updates.notes !== undefined) dbUpdate.notes = updates.notes;
   if (updates.score !== undefined) dbUpdate.score = updates.score;
   if (updates.close_crm_id !== undefined) dbUpdate.close_crm_id = updates.close_crm_id;
@@ -214,7 +333,7 @@ export async function deleteLeads(ids: string[]): Promise<void> {
   if (error) throw error;
 }
 
-// Update multiple leads at once
+// Update multiple leads at once with the same updates
 export async function updateLeads(ids: string[], updates: Partial<Lead>): Promise<Lead[]> {
   const supabase = createClient();
   
@@ -226,7 +345,10 @@ export async function updateLeads(ids: string[], updates: Partial<Lead>): Promis
   // Only include fields that are being updated
   if (updates.handle !== undefined) dbUpdate.handle = updates.handle;
   if (updates.company_name !== undefined) dbUpdate.company_name = updates.company_name;
-  if (updates.service_type !== undefined) dbUpdate.service_type = updates.service_type;
+  if (updates.service_type !== undefined) {
+    dbUpdate.service_type = updates.service_type;
+    // normalized_service_type is calculated on the fly, not stored
+  }
   if (updates.city !== undefined) dbUpdate.city = updates.city;
   if (updates.state !== undefined) dbUpdate.state = updates.state;
   if (updates.phone !== undefined) dbUpdate.phone = updates.phone;
@@ -241,15 +363,7 @@ export async function updateLeads(ids: string[], updates: Partial<Lead>): Promis
   if (updates.running_ads !== undefined) dbUpdate.running_ads = updates.running_ads;
   if (updates.ad_start_date !== undefined) dbUpdate.ad_start_date = updates.ad_start_date;
   if (updates.ad_copy !== undefined) dbUpdate.ad_copy = updates.ad_copy;
-  if (updates.ad_call_to_action !== undefined) dbUpdate.ad_call_to_action = updates.ad_call_to_action;
-  if (updates.service_areas !== undefined) dbUpdate.service_areas = updates.service_areas;
-  if (updates.price_info !== undefined) dbUpdate.price_info = updates.price_info;
   if (updates.ad_platform !== undefined) dbUpdate.ad_platform = updates.ad_platform;
-  if (updates.dm_sent !== undefined) dbUpdate.dm_sent = updates.dm_sent;
-  if (updates.dm_response !== undefined) dbUpdate.dm_response = updates.dm_response;
-  if (updates.called !== undefined) dbUpdate.called = updates.called;
-  if (updates.call_result !== undefined) dbUpdate.call_result = updates.call_result;
-  if (updates.follow_up_date !== undefined) dbUpdate.follow_up_date = updates.follow_up_date;
   if (updates.notes !== undefined) dbUpdate.notes = updates.notes;
   if (updates.score !== undefined) dbUpdate.score = updates.score;
   if (updates.close_crm_id !== undefined) dbUpdate.close_crm_id = updates.close_crm_id;
@@ -263,6 +377,62 @@ export async function updateLeads(ids: string[], updates: Partial<Lead>): Promis
   if (error) throw error;
   
   return (data || []).map(dbToAppLead);
+}
+
+// Update multiple leads with different values for each
+export async function updateLeadsBatch(updates: Array<{ id: string, updates: Partial<Lead> }>): Promise<Lead[]> {
+  const supabase = createClient();
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  // Process updates in parallel using Promise.all
+  const updatePromises = updates.map(async ({ id, updates: leadUpdates }) => {
+    const dbUpdate: DbLeadUpdate = {};
+    
+    // Only include fields that are being updated
+    if (leadUpdates.handle !== undefined) dbUpdate.handle = leadUpdates.handle;
+    if (leadUpdates.company_name !== undefined) dbUpdate.company_name = leadUpdates.company_name;
+    if (leadUpdates.service_type !== undefined) dbUpdate.service_type = leadUpdates.service_type;
+    if (leadUpdates.city !== undefined) dbUpdate.city = leadUpdates.city;
+    if (leadUpdates.state !== undefined) dbUpdate.state = leadUpdates.state;
+    if (leadUpdates.phone !== undefined) dbUpdate.phone = leadUpdates.phone;
+    if (leadUpdates.email !== undefined) dbUpdate.email = leadUpdates.email;
+    if (leadUpdates.email2 !== undefined) dbUpdate.email2 = leadUpdates.email2;
+    if (leadUpdates.email3 !== undefined) dbUpdate.email3 = leadUpdates.email3;
+    if (leadUpdates.instagram_url !== undefined) dbUpdate.instagram_url = leadUpdates.instagram_url;
+    if (leadUpdates.facebook_url !== undefined) dbUpdate.facebook_url = leadUpdates.facebook_url;
+    if (leadUpdates.linkedin_url !== undefined) dbUpdate.linkedin_url = leadUpdates.linkedin_url;
+    if (leadUpdates.twitter_url !== undefined) dbUpdate.twitter_url = leadUpdates.twitter_url;
+    if (leadUpdates.website !== undefined) dbUpdate.website = leadUpdates.website;
+    if (leadUpdates.google_maps_url !== undefined) dbUpdate.google_maps_url = leadUpdates.google_maps_url;
+    if (leadUpdates.address !== undefined) dbUpdate.address = leadUpdates.address;
+    if (leadUpdates.full_address !== undefined) dbUpdate.full_address = leadUpdates.full_address;
+    if (leadUpdates.search_query !== undefined) dbUpdate.search_query = leadUpdates.search_query;
+    if (leadUpdates.rating !== undefined) dbUpdate.rating = leadUpdates.rating;
+    if (leadUpdates.review_count !== undefined) dbUpdate.review_count = leadUpdates.review_count;
+    if (leadUpdates.lead_source !== undefined) dbUpdate.lead_source = leadUpdates.lead_source;
+    if (leadUpdates.running_ads !== undefined) dbUpdate.running_ads = leadUpdates.running_ads;
+    if (leadUpdates.ad_start_date !== undefined) dbUpdate.ad_start_date = leadUpdates.ad_start_date;
+    if (leadUpdates.ad_copy !== undefined) dbUpdate.ad_copy = leadUpdates.ad_copy;
+    if (leadUpdates.ad_platform !== undefined) dbUpdate.ad_platform = leadUpdates.ad_platform;
+    if (leadUpdates.notes !== undefined) dbUpdate.notes = leadUpdates.notes;
+    if (leadUpdates.score !== undefined) dbUpdate.score = leadUpdates.score;
+    if (leadUpdates.close_crm_id !== undefined) dbUpdate.close_crm_id = leadUpdates.close_crm_id;
+
+    const { data, error } = await supabase
+      .from('leads')
+      .update(dbUpdate)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return dbToAppLead(data);
+  });
+
+  const updateResults = await Promise.all(updatePromises);
+  return updateResults;
 }
 
 // Extract leads with AI (this will stay the same, just save to Supabase instead)

@@ -38,8 +38,8 @@ export default function AnalyticsDashboardModal({ open, onClose }: AnalyticsDash
     return null;
   }
 
-  const conversionRate = stats.total > 0 
-    ? (stats.conversionFunnel.contacted / stats.total) * 100 
+  const adsPercentage = stats.total > 0 
+    ? (stats.runningAds / stats.total) * 100 
     : 0;
 
   return (
@@ -107,10 +107,10 @@ export default function AnalyticsDashboardModal({ open, onClose }: AnalyticsDash
                         </div>
 
                         <div className="bg-white border rounded-lg p-4">
-                          <h4 className="text-sm font-medium text-gray-500">Contact Rate</h4>
-                          <p className="mt-2 text-3xl font-semibold text-gray-900">{formatPercentage(conversionRate)}</p>
+                          <h4 className="text-sm font-medium text-gray-500">Running Ads</h4>
+                          <p className="mt-2 text-3xl font-semibold text-gray-900">{formatPercentage(adsPercentage)}</p>
                           <p className="mt-2 text-sm text-gray-600">
-                            {formatNumber(stats.conversionFunnel.contacted)} contacted
+                            {formatNumber(stats.runningAds)} companies
                           </p>
                         </div>
 
@@ -239,14 +239,6 @@ export default function AnalyticsDashboardModal({ open, onClose }: AnalyticsDash
                             <div className="text-center">
                               <p className="text-2xl font-semibold text-gray-900">{formatNumber(stats.runningAds)}</p>
                               <p className="text-sm text-gray-600">Running Ads</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-2xl font-semibold text-gray-900">{formatNumber(stats.dmSent)}</p>
-                              <p className="text-sm text-gray-600">DMs Sent</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-2xl font-semibold text-gray-900">{formatNumber(stats.called)}</p>
-                              <p className="text-sm text-gray-600">Calls Made</p>
                             </div>
                           </div>
                         </div>

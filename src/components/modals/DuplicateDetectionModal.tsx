@@ -66,64 +66,112 @@ export default function DuplicateDetectionModal({ open, onClose }: DuplicateDete
   };
 
   const handleMergeSelected = async () => {
+    console.log('Merge button clicked!', { selectedGroups: selectedGroups.size });
+    
     if (selectedGroups.size === 0) {
       toast.error('Please select groups to merge');
       return;
     }
 
+    console.log(`Starting merge of ${selectedGroups.size} groups...`);
     setIsProcessing(true);
     let successCount = 0;
     let errorCount = 0;
+    let totalDeleted = 0;
 
     try {
-      for (const groupId of Array.from(selectedGroups)) {
-        const group = duplicateGroups.find(g => g.id === groupId);
-        if (!group) continue;
+      // Process in batches for better performance
+      const groupIds = Array.from(selectedGroups);
+      const BATCH_SIZE = 10;
+      
+      for (let i = 0; i < groupIds.length; i += BATCH_SIZE) {
+        const batch = groupIds.slice(i, i + BATCH_SIZE);
+        console.log(`Processing batch ${Math.floor(i/BATCH_SIZE) + 1} of ${Math.ceil(groupIds.length/BATCH_SIZE)}`);
+        
+        await Promise.all(batch.map(async (groupId) => {
+          const group = duplicateGroups.find(g => g.id === groupId);
+          if (!group) return;
 
-        const masterId = masterLeads[groupId];
-        if (!masterId) continue;
-
-        try {
-          // Merge the leads
-          const mergedData = mergeLeads(group.leads, masterId);
-          
-          // Update the master lead with merged data
-          const updatedLead = await updateLead(masterId, mergedData);
-          updateLeadInStore(updatedLead);
-          
-          // Delete the duplicate leads (except master)
-          const duplicateIds = group.leads
-            .filter(lead => lead.id !== masterId)
-            .map(lead => lead.id);
-          
-          if (duplicateIds.length > 0) {
-            await deleteLeads(duplicateIds);
-            duplicateIds.forEach(id => deleteLead(id));
+          const masterId = masterLeads[groupId];
+          if (!masterId) {
+            console.warn(`No master selected for group ${groupId}`);
+            return;
           }
-          
-          successCount++;
-        } catch (error) {
-          console.error(`Failed to merge group ${groupId}:`, error);
-          errorCount++;
-        }
+
+          try {
+            // Merge the leads
+            const mergedData = mergeLeads(group.leads, masterId);
+            console.log(`Merging ${group.leads.length} leads into master ${masterId}`);
+            
+            // Update the master lead with merged data
+            const updatedLead = await updateLead(masterId, mergedData);
+            updateLeadInStore(updatedLead);
+            
+            // Delete the duplicate leads (except master)
+            const duplicateIds = group.leads
+              .filter(lead => lead.id !== masterId)
+              .map(lead => lead.id);
+            
+            if (duplicateIds.length > 0) {
+              console.log(`Deleting ${duplicateIds.length} duplicates`);
+              await deleteLeads(duplicateIds);
+              duplicateIds.forEach(id => deleteLead(id));
+              totalDeleted += duplicateIds.length;
+            }
+            
+            successCount++;
+          } catch (error) {
+            console.error(`Failed to merge group ${groupId}:`, error);
+            errorCount++;
+          }
+        }));
+        
+        // Update progress
+        toast.loading(`Merged ${Math.min((i + BATCH_SIZE), groupIds.length)} of ${groupIds.length} groups...`, {
+          id: 'merge-progress'
+        });
       }
 
+      // Dismiss progress toast
+      toast.dismiss('merge-progress');
+      
+      console.log(`Merge complete. Success: ${successCount}, Errors: ${errorCount}, Deleted: ${totalDeleted} leads`);
+      
       if (successCount > 0) {
-        toast.success(`Merged ${successCount} duplicate group${successCount !== 1 ? 's' : ''}`);
+        toast.success(`Successfully merged ${successCount} groups and removed ${totalDeleted} duplicate leads!`, {
+          duration: 5000
+        });
       }
       
       if (errorCount > 0) {
-        toast.error(`Failed to merge ${errorCount} group${errorCount !== 1 ? 's' : ''}`);
+        toast.error(`Failed to merge ${errorCount} group${errorCount !== 1 ? 's' : ''}`, {
+          duration: 5000
+        });
       }
 
-      // Refresh duplicates list
-      await scanForDuplicates();
-      setSelectedGroups(new Set());
+      // Refresh the page data
+      toast.loading('Refreshing data...', { id: 'refresh-data' });
+      
+      // Force refresh from database
+      setTimeout(async () => {
+        await scanForDuplicates();
+        setSelectedGroups(new Set());
+        toast.dismiss('refresh-data');
+        
+        // If we deleted a lot of leads, suggest page refresh
+        if (totalDeleted > 1000) {
+          toast('Large number of leads deleted. Refresh the page for best performance.', {
+            duration: 5000,
+            icon: '🔄'
+          });
+        }
+      }, 1000);
     } catch (error) {
       toast.error('An error occurred during merge');
-      console.error(error);
+      console.error('Merge error:', error);
     } finally {
       setIsProcessing(false);
+      toast.dismiss('merge-progress');
     }
   };
 
@@ -261,8 +309,8 @@ export default function DuplicateDetectionModal({ open, onClose }: DuplicateDete
                                       <div className="ml-3 flex-1">
                                         <div className="flex items-center justify-between">
                                           <div className="flex items-center gap-2">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getMatchTypeColor(group.matchType)}`}>
-                                              {getMatchTypeLabel(group.matchType)}
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getMatchTypeColor(group.matchType || 'company')}`}>
+                                              {getMatchTypeLabel(group.matchType || 'company')}
                                             </span>
                                             <span className="text-sm text-gray-500">
                                               {group.leads.length} leads • {Math.round(group.confidence * 100)}% confidence

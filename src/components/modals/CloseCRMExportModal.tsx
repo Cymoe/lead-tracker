@@ -70,7 +70,6 @@ export default function CloseCRMExportModal({ open, onClose }: CloseCRMExportMod
       'custom.cf_instagram_handle',
       'custom.cf_instagram_url',
       'custom.cf_ad_copy',
-      'custom.cf_price_info',
       'description' // Notes and other info
     ];
 
@@ -86,7 +85,6 @@ export default function CloseCRMExportModal({ open, onClose }: CloseCRMExportMod
       const description = [
         lead.notes,
         exportOptions.includeAdInfo && lead.ad_copy ? `Ad Copy: ${lead.ad_copy}` : '',
-        exportOptions.includeAdInfo && lead.price_info ? `Pricing: ${lead.price_info}` : '',
         `Source: ${lead.lead_source}`,
         `Added: ${new Date(lead.created_at).toLocaleDateString()}`
       ].filter(Boolean).join('\n\n');
@@ -103,7 +101,6 @@ export default function CloseCRMExportModal({ open, onClose }: CloseCRMExportMod
         exportOptions.includeInstagram ? (lead.handle || '') : '',
         exportOptions.includeInstagram ? (lead.instagram_url || '') : '',
         exportOptions.includeAdInfo ? (lead.ad_copy || '') : '',
-        exportOptions.includeAdInfo ? (lead.price_info || '') : '',
         exportOptions.includeNotes ? description : ''
       ];
     });

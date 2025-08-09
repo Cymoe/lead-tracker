@@ -16,7 +16,6 @@ interface MobileLeadCardProps {
   onToggleSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  onCheckPlatforms: (leadId: string) => void;
 }
 
 export default function MobileLeadCard({
@@ -24,8 +23,7 @@ export default function MobileLeadCard({
   selected,
   onToggleSelect,
   onEdit,
-  onDelete,
-  onCheckPlatforms
+  onDelete
 }: MobileLeadCardProps) {
   return (
     <div className={`bg-white rounded-lg shadow-sm border ${
@@ -44,8 +42,8 @@ export default function MobileLeadCard({
             <h3 className="font-semibold text-gray-900 text-base">
               {lead.company_name}
             </h3>
-            {lead.service_type && (
-              <p className="text-sm text-gray-500 mt-0.5">{lead.service_type}</p>
+            {(lead.normalized_service_type || lead.service_type) && (
+              <p className="text-sm text-gray-500 mt-0.5">{lead.normalized_service_type || lead.service_type}</p>
             )}
           </div>
         </div>
@@ -118,13 +116,6 @@ export default function MobileLeadCard({
           </div>
         )}
         
-        {lead.dm_sent && (
-          <div className="flex items-center gap-1 text-xs text-blue-600">
-            <CheckIconSolid className="h-4 w-4" />
-            <span>Contacted</span>
-          </div>
-        )}
-        
         {lead.rating && (
           <div className="flex items-center gap-1 text-xs text-gray-600">
             <span>⭐ {lead.rating}</span>
@@ -133,13 +124,6 @@ export default function MobileLeadCard({
             )}
           </div>
         )}
-        
-        <button
-          onClick={() => onCheckPlatforms(lead.id)}
-          className="ml-auto text-xs text-blue-600 hover:text-blue-800"
-        >
-          Check Ads
-        </button>
       </div>
     </div>
   );

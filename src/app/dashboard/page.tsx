@@ -5,6 +5,7 @@ import { useLeadStore } from '@/lib/store';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import LoadingScreen from '@/components/LoadingScreen';
 import { 
   ChartBarIcon, 
   UserGroupIcon, 
@@ -19,8 +20,8 @@ import { fetchLeads } from '@/lib/api';
 import SettingsModal from '@/components/modals/SettingsModal';
 import AddLeadModal from '@/components/modals/AddLeadModal';
 import GoogleMapsImportModal from '@/components/modals/GoogleMapsImportModal';
-import FacebookAdsSearchModal from '@/components/modals/FacebookAdsSearchModal';
 import { Lead } from '@/types';
+import { initializeServiceTypeNormalization } from '@/utils/initialize-normalization';
 
 export default function DashboardPage() {
   const { setLeads, leads } = useLeadStore();
@@ -39,7 +40,7 @@ export default function DashboardPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showAddLead, setShowAddLead] = useState(false);
   const [showGoogleMapsImport, setShowGoogleMapsImport] = useState(false);
-  const [showFacebookAdsSearch, setShowFacebookAdsSearch] = useState(false);
+  const [isViewsPanelOpen, setIsViewsPanelOpen] = useState(false);
 
   // Calculate statistics
   const stats = {
@@ -61,6 +62,9 @@ export default function DashboardPage() {
 
   const loadLeads = async () => {
     try {
+      // Initialize service type normalization on first load
+      await initializeServiceTypeNormalization();
+      
       const fetchedLeads = await fetchLeads();
       
       // Add hardcoded multi-source example at the top
@@ -84,7 +88,6 @@ export default function DashboardPage() {
         running_ads: true,
         ad_start_date: '2024-01-15',
         ad_copy: '🚰 Emergency Plumbing Services Available 24/7! Licensed & Insured. Same-day service for all your plumbing needs.',
-        ad_call_to_action: 'Get Quote',
         ad_platform: 'Facebook',
         ad_platforms: [
           {
@@ -103,8 +106,6 @@ export default function DashboardPage() {
         total_ad_platforms: 2,
         notes: '🔗 Multi-source lead: Found in both Google Maps and FB Ad Library\n\nHigh-value lead! Established business with strong online presence and active marketing campaigns. Google Maps shows 127 reviews with 4.8 rating. Running Facebook ads for emergency services.',
         score: 'A+',
-        dm_sent: false,
-        called: false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -126,7 +127,19 @@ export default function DashboardPage() {
     const newValue = !isSidebarCollapsed;
     setIsSidebarCollapsed(newValue);
     localStorage.setItem('sidebarCollapsed', newValue.toString());
+    // Emit event for other components to listen
+    window.dispatchEvent(new Event('sidebarToggled'));
   };
+
+  // Listen for Views panel state changes from AppLayout
+  useEffect(() => {
+    const handleViewsPanelToggle = (event: CustomEvent) => {
+      setIsViewsPanelOpen(event.detail.isOpen);
+    };
+    
+    window.addEventListener('viewsPanelToggled', handleViewsPanelToggle as EventListener);
+    return () => window.removeEventListener('viewsPanelToggled', handleViewsPanelToggle as EventListener);
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -135,14 +148,7 @@ export default function DashboardPage() {
   }, [user, loading, router]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!user) {
@@ -155,7 +161,7 @@ export default function DashboardPage() {
     .slice(0, 5);
 
   return (
-    <>
+    <div className="flex w-full">
       <Sidebar
         onAddLead={() => setShowAddLead(true)}
         onGoogleSheetsSync={() => {}}
@@ -167,137 +173,128 @@ export default function DashboardPage() {
         onToggleCollapse={handleToggleSidebar}
       />
       
-      <div className={`transition-all duration-300 ${
-        isSidebarCollapsed ? 'lg:pl-20' : 'lg:pl-72'
+      <div className={`flex-1 transition-all duration-300 ${
+        isSidebarCollapsed 
+          ? isViewsPanelOpen ? 'lg:pl-[384px]' : 'lg:pl-16'
+          : isViewsPanelOpen ? 'lg:pl-[544px]' : 'lg:pl-56'
       }`}>
-        <main className="py-10 bg-gray-50 min-h-screen">
+        <main className="py-4 bg-gray-50 min-h-screen">
           <div className="px-4 sm:px-6 lg:px-8">
             {/* Header */}
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold text-gray-900">Welcome back!</h1>
-              <p className="mt-2 text-gray-600">Here&apos;s what&apos;s happening with your leads</p>
+            <div className="mb-4">
+              <h1 className="text-xl font-bold text-gray-900">Welcome back!</h1>
+              <p className="mt-1 text-sm text-gray-600">Here&apos;s what&apos;s happening with your leads</p>
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              <div className="bg-white rounded-md shadow-sm p-3 border border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Total Leads</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalLeads}</p>
+                    <p className="text-xs font-medium text-gray-600">Total Leads</p>
+                    <p className="text-xl font-bold text-gray-900 mt-1">{stats.totalLeads}</p>
                   </div>
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <UserGroupIcon className="h-6 w-6 text-blue-600" />
+                  <div className="p-2 bg-blue-50 rounded">
+                    <UserGroupIcon className="h-4 w-4 text-blue-600" />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+              <div className="bg-white rounded-md shadow-sm p-3 border border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Companies</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">{stats.uniqueCompanies}</p>
+                    <p className="text-xs font-medium text-gray-600">Companies</p>
+                    <p className="text-xl font-bold text-gray-900 mt-1">{stats.uniqueCompanies}</p>
                   </div>
-                  <div className="p-3 bg-green-50 rounded-lg">
-                    <BuildingOfficeIcon className="h-6 w-6 text-green-600" />
+                  <div className="p-2 bg-green-50 rounded">
+                    <BuildingOfficeIcon className="h-4 w-4 text-green-600" />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+              <div className="bg-white rounded-md shadow-sm p-3 border border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Running Ads</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">{stats.companiesWithAds}</p>
+                    <p className="text-xs font-medium text-gray-600">Running Ads</p>
+                    <p className="text-xl font-bold text-gray-900 mt-1">{stats.companiesWithAds}</p>
                   </div>
-                  <div className="p-3 bg-purple-50 rounded-lg">
-                    <GlobeAltIcon className="h-6 w-6 text-purple-600" />
+                  <div className="p-2 bg-purple-50 rounded">
+                    <GlobeAltIcon className="h-4 w-4 text-purple-600" />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+              <div className="bg-white rounded-md shadow-sm p-3 border border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">New This Week</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-2">{stats.newThisWeek}</p>
+                    <p className="text-xs font-medium text-gray-600">New This Week</p>
+                    <p className="text-xl font-bold text-gray-900 mt-1">{stats.newThisWeek}</p>
                   </div>
-                  <div className="p-3 bg-orange-50 rounded-lg">
-                    <ArrowTrendingUpIcon className="h-6 w-6 text-orange-600" />
+                  <div className="p-2 bg-orange-50 rounded">
+                    <ArrowTrendingUpIcon className="h-4 w-4 text-orange-600" />
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Quick Actions and Recent Activity */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Quick Actions */}
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-                <div className="space-y-3">
+                <h2 className="text-sm font-semibold text-gray-900 mb-2">Quick Actions</h2>
+                <div className="space-y-2">
                   <button
                     onClick={() => setShowAddLead(true)}
-                    className="w-full flex items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:bg-gray-50 transition-colors"
+                    className="w-full flex items-center justify-between p-2 bg-white rounded shadow-sm border border-gray-200 hover:bg-gray-50 transition-colors"
                   >
-                    <div className="flex items-center gap-3">
-                      <DocumentPlusIcon className="h-5 w-5 text-gray-600" />
-                      <span className="font-medium text-gray-900">Add New Lead</span>
+                    <div className="flex items-center gap-2">
+                      <DocumentPlusIcon className="h-4 w-4 text-gray-600" />
+                      <span className="text-sm font-medium text-gray-900">Add New Lead</span>
                     </div>
-                    <span className="text-gray-400">→</span>
+                    <span className="text-gray-400 text-sm">→</span>
                   </button>
 
                   <button
                     onClick={() => setShowGoogleMapsImport(true)}
-                    className="w-full flex items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:bg-gray-50 transition-colors"
+                    className="w-full flex items-center justify-between p-2 bg-white rounded shadow-sm border border-gray-200 hover:bg-gray-50 transition-colors"
                   >
-                    <div className="flex items-center gap-3">
-                      <MagnifyingGlassIcon className="h-5 w-5 text-gray-600" />
-                      <span className="font-medium text-gray-900">Search Google Maps</span>
+                    <div className="flex items-center gap-2">
+                      <MagnifyingGlassIcon className="h-4 w-4 text-gray-600" />
+                      <span className="text-sm font-medium text-gray-900">Search Google Maps</span>
                     </div>
-                    <span className="text-gray-400">→</span>
-                  </button>
-
-                  <button
-                    onClick={() => setShowFacebookAdsSearch(true)}
-                    className="w-full flex items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <GlobeAltIcon className="h-5 w-5 text-gray-600" />
-                      <span className="font-medium text-gray-900">Search Facebook Ads</span>
-                    </div>
-                    <span className="text-gray-400">→</span>
+                    <span className="text-gray-400 text-sm">→</span>
                   </button>
 
                   <button
                     onClick={() => router.push('/leads')}
-                    className="w-full flex items-center justify-between p-4 bg-white rounded-lg shadow-sm border border-gray-200 hover:bg-gray-50 transition-colors"
+                    className="w-full flex items-center justify-between p-2 bg-white rounded shadow-sm border border-gray-200 hover:bg-gray-50 transition-colors"
                   >
-                    <div className="flex items-center gap-3">
-                      <ChartBarIcon className="h-5 w-5 text-gray-600" />
-                      <span className="font-medium text-gray-900">View All Leads</span>
+                    <div className="flex items-center gap-2">
+                      <ChartBarIcon className="h-4 w-4 text-gray-600" />
+                      <span className="text-sm font-medium text-gray-900">View All Leads</span>
                     </div>
-                    <span className="text-gray-400">→</span>
+                    <span className="text-gray-400 text-sm">→</span>
                   </button>
                 </div>
               </div>
 
               {/* Recent Activity */}
               <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Leads</h2>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <h2 className="text-sm font-semibold text-gray-900 mb-2">Recent Leads</h2>
+                <div className="bg-white rounded shadow-sm border border-gray-200 overflow-hidden">
                   {recentLeads.length > 0 ? (
                     <div className="divide-y divide-gray-200">
                       {recentLeads.map(lead => (
-                        <div key={lead.id} className="p-4 hover:bg-gray-50">
+                        <div key={lead.id} className="p-2 hover:bg-gray-50">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="font-medium text-gray-900">{lead.company_name}</p>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-sm font-medium text-gray-900">{lead.company_name}</p>
+                              <p className="text-xs text-gray-500">
                                 {lead.city} • {lead.service_type}
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className="text-sm text-gray-500">
+                              <p className="text-xs text-gray-500">
                                 {new Date(lead.created_at).toLocaleDateString()}
                               </p>
                               <p className="text-xs text-gray-400">{lead.lead_source}</p>
@@ -307,12 +304,12 @@ export default function DashboardPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="p-8 text-center">
-                      <ClockIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                      <p className="text-gray-500">No leads yet</p>
+                    <div className="p-4 text-center">
+                      <ClockIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">No leads yet</p>
                       <button
                         onClick={() => setShowAddLead(true)}
-                        className="mt-3 text-blue-600 hover:text-blue-800 font-medium text-sm"
+                        className="mt-2 text-blue-600 hover:text-blue-800 font-medium text-xs"
                       >
                         Add your first lead
                       </button>
@@ -323,49 +320,49 @@ export default function DashboardPage() {
             </div>
 
             {/* Lead Sources */}
-            <div className="mt-8">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Lead Sources</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-600">Instagram Manual</span>
-                    <span className="text-pink-600 font-semibold">{stats.leadsBySource.instagram}</span>
+            <div className="mt-4">
+              <h2 className="text-sm font-semibold text-gray-900 mb-2">Lead Sources</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div className="bg-white rounded shadow-sm border border-gray-200 p-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-gray-600">Instagram Manual</span>
+                    <span className="text-pink-600 font-semibold text-sm">{stats.leadsBySource.instagram}</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-gray-200 rounded-full h-1">
                     <div 
-                      className="bg-pink-600 h-2 rounded-full" 
+                      className="bg-pink-600 h-1 rounded-full" 
                       style={{ width: `${stats.totalLeads > 0 ? (stats.leadsBySource.instagram / stats.totalLeads) * 100 : 0}%` }}
                     />
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-600">FB Ad Library</span>
-                    <span className="text-blue-600 font-semibold">{stats.leadsBySource.fbAds}</span>
+                <div className="bg-white rounded shadow-sm border border-gray-200 p-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-gray-600">FB Ad Library</span>
+                    <span className="text-blue-600 font-semibold text-sm">{stats.leadsBySource.fbAds}</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-gray-200 rounded-full h-1">
                     <div 
-                      className="bg-blue-600 h-2 rounded-full" 
+                      className="bg-blue-600 h-1 rounded-full" 
                       style={{ width: `${stats.totalLeads > 0 ? (stats.leadsBySource.fbAds / stats.totalLeads) * 100 : 0}%` }}
                     />
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-600">Google Maps</span>
-                    <span className="text-green-600 font-semibold">{stats.leadsBySource.googleMaps}</span>
+                <div className="bg-white rounded shadow-sm border border-gray-200 p-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-gray-600">Google Maps</span>
+                    <span className="text-green-600 font-semibold text-sm">{stats.leadsBySource.googleMaps}</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-gray-200 rounded-full h-1">
                     <div 
-                      className="bg-green-600 h-2 rounded-full" 
+                      className="bg-green-600 h-1 rounded-full" 
                       style={{ width: `${stats.totalLeads > 0 ? (stats.leadsBySource.googleMaps / stats.totalLeads) * 100 : 0}%` }}
                     />
                   </div>
                 </div>
               </div>
-            </div>
+                        </div>
           </div>
         </main>
       </div>
@@ -377,10 +374,6 @@ export default function DashboardPage() {
         open={showGoogleMapsImport} 
         onClose={() => setShowGoogleMapsImport(false)} 
       />
-      <FacebookAdsSearchModal
-        open={showFacebookAdsSearch}
-        onClose={() => setShowFacebookAdsSearch(false)}
-      />
-    </>
+    </div>
   );
 }

@@ -4,9 +4,11 @@ import { ChevronDownIcon } from '@heroicons/react/24/outline';
 
 interface EnhancedFiltersProps {
   compact?: boolean;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
-export default function EnhancedFilters({ compact = false }: EnhancedFiltersProps = {}) {
+export default function EnhancedFilters({ compact = false, searchQuery = '', onSearchChange }: EnhancedFiltersProps = {}) {
   const { 
     leads, 
     sourceFilter, 
@@ -14,46 +16,33 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
     cityFilter,
     serviceTypeFilter,
     setCityFilter,
-    setServiceTypeFilter
+    setServiceTypeFilter,
+    currentMarket
   } = useLeadStore();
-  const [showCityDropdown, setShowCityDropdown] = useState(false);
-  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   
-  const cityDropdownRef = useRef<HTMLDivElement>(null);
-  const serviceDropdownRef = useRef<HTMLDivElement>(null);
-  
-  // Click outside handler
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (cityDropdownRef.current && !cityDropdownRef.current.contains(event.target as Node)) {
-        setShowCityDropdown(false);
-      }
-      if (serviceDropdownRef.current && !serviceDropdownRef.current.contains(event.target as Node)) {
-        setShowServiceDropdown(false);
-      }
-    };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Get unique cities and service types
+  // Get unique cities and service types (filtered by current market if selected)
   const cities = useMemo(() => {
     const citySet = new Set<string>();
-    leads.forEach(lead => {
+    let filteredLeads = leads;
+    
+    if (currentMarket && currentMarket.id !== 'all') {
+      if (currentMarket.type === 'state') {
+        filteredLeads = leads.filter(lead => lead.state === currentMarket.state);
+      } else if (currentMarket.type === 'metro' || currentMarket.type === 'city') {
+        filteredLeads = leads.filter(lead => 
+          currentMarket.cities.includes(lead.city || '') && lead.state === currentMarket.state
+        );
+      }
+    }
+      
+    filteredLeads.forEach(lead => {
       if (lead.city) citySet.add(lead.city);
     });
     return Array.from(citySet).sort();
-  }, [leads]);
+  }, [leads, currentMarket]);
 
-  const serviceTypes = useMemo(() => {
-    const typeSet = new Set<string>();
-    leads.forEach(lead => {
-      if (lead.service_type) typeSet.add(lead.service_type);
-    });
-    return Array.from(typeSet).sort();
-  }, [leads]);
 
   // Filter leads based on all criteria
   const filteredLeads = useMemo(() => {
@@ -62,6 +51,7 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
       if (lead.lead_source === 'Instagram Manual' && !sourceFilter.instagram) return false;
       if (lead.lead_source === 'FB Ad Library' && !sourceFilter.adLibrary) return false;
       if (lead.lead_source === 'Google Maps' && !sourceFilter.googleMaps) return false;
+      if (lead.lead_source === 'CSV Import' && !sourceFilter.csvImport) return false;
       
       // City filter
       if (cityFilter !== 'all' && lead.city !== cityFilter) return false;
@@ -73,33 +63,32 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
     });
   }, [leads, sourceFilter, cityFilter, serviceTypeFilter]);
 
-  // Count leads by source (respecting other filters)
+  // Count leads by source
   const sourceCounts = useMemo(() => {
-    const baseFiltered = leads.filter(lead => {
-      if (cityFilter !== 'all' && lead.city !== cityFilter) return false;
-      if (serviceTypeFilter !== 'all' && lead.service_type !== serviceTypeFilter) return false;
-      return true;
-    });
-
+    const nullCount = leads.filter(lead => lead.lead_source === null || lead.lead_source === undefined).length;
+    
     return {
-      instagram: baseFiltered.filter(lead => lead.lead_source === 'Instagram Manual').length,
-      adLibrary: baseFiltered.filter(lead => lead.lead_source === 'FB Ad Library').length,
-      googleMaps: baseFiltered.filter(lead => lead.lead_source === 'Google Maps').length,
-      total: baseFiltered.length
+      instagram: leads.filter(lead => lead.lead_source === 'Instagram Manual').length,
+      adLibrary: leads.filter(lead => lead.lead_source === 'FB Ad Library').length,
+      googleMaps: leads.filter(lead => lead.lead_source === 'Google Maps').length,
+      csvImport: leads.filter(lead => lead.lead_source === 'CSV Import').length,
+      null: nullCount,
+      total: leads.length
     };
-  }, [leads, cityFilter, serviceTypeFilter]);
+  }, [leads]);
 
   // Check if all source filters are active
-  const allSourcesActive = sourceFilter.instagram && sourceFilter.adLibrary && sourceFilter.googleMaps;
+  const allSourcesActive = sourceFilter.instagram && sourceFilter.adLibrary && sourceFilter.googleMaps && sourceFilter.csvImport;
 
-  const handleSourceClick = (source: 'instagram' | 'adLibrary' | 'googleMaps') => {
+  const handleSourceClick = (source: 'instagram' | 'adLibrary' | 'googleMaps' | 'csvImport') => {
     if (sourceFilter[source] && !allSourcesActive) {
-      setSourceFilter({ instagram: true, adLibrary: true, googleMaps: true });
+      setSourceFilter({ instagram: true, adLibrary: true, googleMaps: true, csvImport: true });
     } else {
       setSourceFilter({ 
         instagram: source === 'instagram',
         adLibrary: source === 'adLibrary',
-        googleMaps: source === 'googleMaps'
+        googleMaps: source === 'googleMaps',
+        csvImport: source === 'csvImport'
       });
     }
   };
@@ -116,9 +105,9 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
           </svg>
           <span>Filters</span>
-          {(cityFilter !== 'all' || serviceTypeFilter !== 'all' || !allSourcesActive) && (
+          {!allSourcesActive && (
             <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-600 rounded-full">
-              {[cityFilter !== 'all', serviceTypeFilter !== 'all', !allSourcesActive].filter(Boolean).length}
+              1
             </span>
           )}
         </button>
@@ -142,58 +131,16 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
                 </button>
               </div>
               
-              {/* City filter */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
-                <select
-                  value={cityFilter}
-                  onChange={(e) => setCityFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Cities ({cities.length})</option>
-                  {cities.map(city => {
-                    const count = leads.filter(l => l.city === city && 
-                      (serviceTypeFilter === 'all' || l.service_type === serviceTypeFilter)).length;
-                    return (
-                      <option key={city} value={city}>
-                        {city} ({count})
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              
-              {/* Service type filter */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
-                <select
-                  value={serviceTypeFilter}
-                  onChange={(e) => setServiceTypeFilter(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="all">All Services ({serviceTypes.length})</option>
-                  {serviceTypes.map(type => {
-                    const count = leads.filter(l => l.service_type === type && 
-                      (cityFilter === 'all' || l.city === cityFilter)).length;
-                    return (
-                      <option key={type} value={type}>
-                        {type} ({count})
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              
               {/* Source filters */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Lead Sources</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Lead Sources</label>
                 <div className="space-y-2">
                   <button
-                    onClick={() => setSourceFilter({ instagram: true, adLibrary: true, googleMaps: true })}
+                    onClick={() => setSourceFilter({ instagram: true, adLibrary: true, googleMaps: true, csvImport: true })}
                     className={`w-full px-3 py-2 rounded-lg border transition-all ${
                       allSourcesActive
-                        ? 'bg-blue-600 border-blue-700 text-white'
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        ? 'bg-yellow-500 border-yellow-600 text-black font-medium'
+                        : 'bg-gray-800 dark:bg-gray-900 border-gray-600 dark:border-gray-700 text-gray-300 dark:text-gray-400 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white'
                     }`}
                   >
                     All Sources ({sourceCounts.total})
@@ -203,8 +150,8 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
                     onClick={() => handleSourceClick('instagram')}
                     className={`w-full px-3 py-2 rounded-lg border transition-all ${
                       sourceFilter.instagram && !allSourcesActive
-                        ? 'bg-purple-600 border-purple-700 text-white'
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        ? 'bg-blue-600 border-blue-700 text-white font-medium'
+                        : 'bg-gray-800 dark:bg-gray-900 border-gray-600 dark:border-gray-700 text-gray-300 dark:text-gray-400 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white'
                     }`}
                   >
                     Instagram ({sourceCounts.instagram})
@@ -214,8 +161,8 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
                     onClick={() => handleSourceClick('adLibrary')}
                     className={`w-full px-3 py-2 rounded-lg border transition-all ${
                       sourceFilter.adLibrary && !allSourcesActive
-                        ? 'bg-indigo-600 border-indigo-700 text-white'
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        ? 'bg-blue-600 border-blue-700 text-white font-medium'
+                        : 'bg-gray-800 dark:bg-gray-900 border-gray-600 dark:border-gray-700 text-gray-300 dark:text-gray-400 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white'
                     }`}
                   >
                     FB Ads ({sourceCounts.adLibrary})
@@ -225,11 +172,22 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
                     onClick={() => handleSourceClick('googleMaps')}
                     className={`w-full px-3 py-2 rounded-lg border transition-all ${
                       sourceFilter.googleMaps && !allSourcesActive
-                        ? 'bg-green-600 border-green-700 text-white'
-                        : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        ? 'bg-blue-600 border-blue-700 text-white font-medium'
+                        : 'bg-gray-800 dark:bg-gray-900 border-gray-600 dark:border-gray-700 text-gray-300 dark:text-gray-400 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white'
                     }`}
                   >
                     Google Maps ({sourceCounts.googleMaps})
+                  </button>
+                  
+                  <button
+                    onClick={() => handleSourceClick('csvImport')}
+                    className={`w-full px-3 py-2 rounded-lg border transition-all ${
+                      sourceFilter.csvImport && !allSourcesActive
+                        ? 'bg-blue-600 border-blue-700 text-white font-medium'
+                        : 'bg-gray-800 dark:bg-gray-900 border-gray-600 dark:border-gray-700 text-gray-300 dark:text-gray-400 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white'
+                    }`}
+                  >
+                    CSV Import ({sourceCounts.csvImport})
                   </button>
                 </div>
               </div>
@@ -237,12 +195,10 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
               {/* Clear filters button */}
               <button
                 onClick={() => {
-                  setCityFilter('all');
-                  setServiceTypeFilter('all');
-                  setSourceFilter({ instagram: true, adLibrary: true, googleMaps: true });
+                  setSourceFilter({ instagram: true, adLibrary: true, googleMaps: true, csvImport: true });
                   setShowMobileFilters(false);
                 }}
-                className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                className="w-full px-4 py-2 bg-gray-700 dark:bg-gray-800 text-gray-300 dark:text-gray-400 rounded-lg hover:bg-gray-600 dark:hover:bg-gray-700 hover:text-white transition-colors"
               >
                 Clear All Filters
               </button>
@@ -254,125 +210,32 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-      {/* Location and Service Type Dropdowns */}
-      <div className="flex gap-1.5">
-        {/* City Dropdown */}
-        <div className="relative" ref={cityDropdownRef}>
-          <button
-            onClick={() => {
-              setShowCityDropdown(!showCityDropdown);
-              setShowServiceDropdown(false);
-            }}
-            className={`${
-              compact 
-                ? "px-2.5 py-1 text-xs" 
-                : "px-3 py-1.5 text-xs"
-            } rounded-lg border bg-white text-gray-700 border-gray-300 hover:bg-gray-50 flex items-center gap-1 transition-all duration-300`}
-          >
-            <span className="font-medium truncate">
-              {cityFilter === 'all' ? 'All Cities' : cityFilter}
-            </span>
-            <ChevronDownIcon className={`transition-all duration-300 flex-shrink-0 ${compact ? "h-3 w-3" : "h-4 w-4"}`} />
-          </button>
-          
-          {showCityDropdown && (
-            <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
-              <button
-                onClick={() => {
-                  setCityFilter('all');
-                  setShowCityDropdown(false);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
-              >
-                All Cities ({cities.length})
-              </button>
-              {cities.map(city => {
-                const count = leads.filter(l => l.city === city && 
-                  (serviceTypeFilter === 'all' || l.service_type === serviceTypeFilter)).length;
-                return (
-                  <button
-                    key={city}
-                    onClick={() => {
-                      setCityFilter(city);
-                      setShowCityDropdown(false);
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex justify-between"
-                  >
-                    <span>{city}</span>
-                    <span className="text-gray-500">({count})</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      {/* Search bar */}
+      {onSearchChange && (
+        <div className="flex-1 min-w-[200px] max-w-md">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search leads..."
+            className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
         </div>
-
-        {/* Service Type Dropdown */}
-        <div className="relative" ref={serviceDropdownRef}>
-          <button
-            onClick={() => {
-              setShowServiceDropdown(!showServiceDropdown);
-              setShowCityDropdown(false);
-            }}
-            className={`${
-              compact 
-                ? "px-2.5 py-1 text-xs" 
-                : "px-3 py-1.5 text-xs"
-            } rounded-lg border bg-white text-gray-700 border-gray-300 hover:bg-gray-50 flex items-center justify-between gap-1 transition-all duration-300`}
-          >
-            <span className="font-medium truncate">
-              {serviceTypeFilter === 'all' ? 'All Services' : serviceTypeFilter}
-            </span>
-            <ChevronDownIcon className={`transition-all duration-300 flex-shrink-0 ${compact ? "h-3 w-3" : "h-4 w-4"}`} />
-          </button>
-          
-          {showServiceDropdown && (
-            <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
-              <button
-                onClick={() => {
-                  setServiceTypeFilter('all');
-                  setShowServiceDropdown(false);
-                }}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
-              >
-                All Service Types ({serviceTypes.length})
-              </button>
-              {serviceTypes.map(type => {
-                const count = leads.filter(l => l.service_type === type && 
-                  (cityFilter === 'all' || l.city === cityFilter)).length;
-                return (
-                  <button
-                    key={type}
-                    onClick={() => {
-                      setServiceTypeFilter(type);
-                      setShowServiceDropdown(false);
-                    }}
-                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex justify-between"
-                  >
-                    <span>{type}</span>
-                    <span className="text-gray-500">({count})</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-      </div>
+      )}
       
       {/* Source Filter Pills */}
       <div className="flex items-center gap-1 flex-wrap">
         <button
-          onClick={() => setSourceFilter({ instagram: true, adLibrary: true, googleMaps: true })}
+          onClick={() => setSourceFilter({ instagram: true, adLibrary: true, googleMaps: true, csvImport: true })}
           className={`${
             compact 
               ? 'px-2 py-0.5 text-[11px]' 
               : 'px-2.5 py-1 text-xs'
           } rounded-full border transition-all duration-300 whitespace-nowrap ${
             allSourcesActive
-              ? 'bg-blue-500 border-blue-600 text-white'
-              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+              ? 'bg-yellow-500 border-yellow-600 text-black font-medium'
+              : 'bg-gray-800 dark:bg-gray-900 border-gray-600 dark:border-gray-700 text-gray-300 dark:text-gray-400 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white'
           }`}
         >
           All <span className="font-normal">({sourceCounts.total})</span>
@@ -386,8 +249,8 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
               : 'px-2.5 py-1 text-xs'
           } rounded-full border transition-all duration-300 whitespace-nowrap ${
             sourceFilter.instagram && !allSourcesActive
-              ? 'bg-purple-500 border-purple-600 text-white'
-              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+              ? 'bg-blue-600 border-blue-700 text-white font-medium'
+              : 'bg-gray-800 dark:bg-gray-900 border-gray-600 dark:border-gray-700 text-gray-300 dark:text-gray-400 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white'
           }`}
         >
           IG <span className="font-normal">({sourceCounts.instagram})</span>
@@ -401,8 +264,8 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
               : 'px-2.5 py-1 text-xs'
           } rounded-full border transition-all duration-300 whitespace-nowrap ${
             sourceFilter.adLibrary && !allSourcesActive
-              ? 'bg-indigo-500 border-indigo-600 text-white'
-              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+              ? 'bg-blue-600 border-blue-700 text-white font-medium'
+              : 'bg-gray-800 dark:bg-gray-900 border-gray-600 dark:border-gray-700 text-gray-300 dark:text-gray-400 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white'
           }`}
         >
           FB <span className="font-normal">({sourceCounts.adLibrary})</span>
@@ -416,11 +279,26 @@ export default function EnhancedFilters({ compact = false }: EnhancedFiltersProp
               : 'px-2.5 py-1 text-xs'
           } rounded-full border transition-all duration-300 whitespace-nowrap ${
             sourceFilter.googleMaps && !allSourcesActive
-              ? 'bg-green-500 border-green-600 text-white'
-              : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+              ? 'bg-blue-600 border-blue-700 text-white font-medium'
+              : 'bg-gray-800 dark:bg-gray-900 border-gray-600 dark:border-gray-700 text-gray-300 dark:text-gray-400 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white'
           }`}
         >
           Maps <span className="font-normal">({sourceCounts.googleMaps})</span>
+        </button>
+      
+        <button
+          onClick={() => handleSourceClick('csvImport')}
+          className={`${
+            compact 
+              ? 'px-2 py-0.5 text-[11px]' 
+              : 'px-2.5 py-1 text-xs'
+          } rounded-full border transition-all duration-300 whitespace-nowrap ${
+            sourceFilter.csvImport && !allSourcesActive
+              ? 'bg-blue-600 border-blue-700 text-white font-medium'
+              : 'bg-gray-800 dark:bg-gray-900 border-gray-600 dark:border-gray-700 text-gray-300 dark:text-gray-400 hover:bg-gray-700 dark:hover:bg-gray-800 hover:text-white'
+          }`}
+        >
+          CSV <span className="font-normal">({sourceCounts.csvImport})</span>
         </button>
       </div>
       

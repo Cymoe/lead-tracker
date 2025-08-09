@@ -425,10 +425,8 @@ export function validateLeads(leads: Partial<Lead>[]): {
         id: lead.id || crypto.randomUUID(),
         user_id: lead.user_id || '', // Will be set by the API
         company_name: lead.company_name,
-        lead_source: lead.lead_source || 'Instagram Manual', // Ensure lead_source is always set
+        lead_source: lead.lead_source || 'CSV Import', // Default to CSV Import for CSV uploaded leads
         running_ads: lead.running_ads ?? false,
-        dm_sent: lead.dm_sent ?? false,
-        called: lead.called ?? false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       } as Lead);

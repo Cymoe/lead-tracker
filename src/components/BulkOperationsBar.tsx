@@ -4,7 +4,6 @@ import {
   TrashIcon, 
   TagIcon, 
   DocumentArrowDownIcon,
-  GlobeAltIcon,
   CheckCircleIcon,
   XMarkIcon,
   ArrowPathIcon
@@ -20,7 +19,6 @@ interface BulkOperationsBarProps {
   selectedCount: number;
   onBulkEdit: () => void;
   onExport: () => void;
-  onCheckPlatforms: () => void;
   onClearSelection: () => void;
 }
 
@@ -28,7 +26,6 @@ export default function BulkOperationsBar({
   selectedCount,
   onBulkEdit,
   onExport,
-  onCheckPlatforms,
   onClearSelection
 }: BulkOperationsBarProps) {
   const { selectedLeads, leads, deleteLead, updateLead } = useLeadStore();
@@ -103,8 +100,7 @@ export default function BulkOperationsBar({
         return {
           id,
           updates: { 
-            notes: newNotes,
-            dm_sent: true 
+            notes: newNotes
           }
         };
       }).filter(Boolean) as { id: string; updates: Partial<typeof leads[0]> }[];
@@ -202,15 +198,6 @@ export default function BulkOperationsBar({
                 <span className="hidden sm:inline">Contacted</span>
               </button>
 
-              {/* Check platforms - hidden on mobile */}
-              <button
-                onClick={onCheckPlatforms}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded hover:bg-gray-800 transition-colors"
-                title="Check ad platforms"
-              >
-                <GlobeAltIcon className="h-4 w-4" />
-                Check Ads
-              </button>
 
               {/* Export - hidden on mobile */}
               <button

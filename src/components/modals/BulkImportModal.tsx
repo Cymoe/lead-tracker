@@ -5,11 +5,13 @@ import { useLeadStore } from '@/lib/store';
 import { saveLead } from '@/lib/api';
 import { Lead } from '@/types';
 import toast from 'react-hot-toast';
+import { createImportOperation } from '@/lib/import-operations-api';
 import KeywordAssistant from '../KeywordAssistant';
 import USCityAutocomplete from '../USCityAutocomplete';
 import ServiceTypeDropdown from '../ServiceTypeDropdown';
 import { extractWithAI, extractWithAIStream } from '@/lib/api';
 import { detectDataFormat } from '@/utils/data-format-detector';
+import { findDuplicateLead } from '@/utils/duplicate-detection';
 
 interface BulkImportModalProps {
   open: boolean;
@@ -20,7 +22,7 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
   const { openaiApiKey, addLead, leads, keywordSession } = useLeadStore();
   const [bulkData, setBulkData] = useState('');
   const [bulkCity, setBulkCity] = useState('');
-  const [bulkSource, setBulkSource] = useState<'FB Ad Library' | 'Instagram Manual' | 'Google Maps'>('Instagram Manual');
+  const bulkSource = 'FB Ad Library'; // Fixed source since this modal is only for FB Ad Library
   const [isProcessing, setIsProcessing] = useState(false);
   const [preview, setPreview] = useState<Lead[]>([]);
   const [showPreview, setShowPreview] = useState(false);
@@ -84,12 +86,11 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
           (lead: Lead) => {
             console.log('Received lead:', lead.company_name);
             
-            // Check if duplicate
-            const existingLead = leads.find(
-              existing => 
-                existing.company_name.toLowerCase() === lead.company_name.toLowerCase() ||
-                (existing.handle && lead.handle && existing.handle.toLowerCase() === lead.handle.toLowerCase())
-            );
+            // Check if duplicate using improved detection
+            const existingLead = findDuplicateLead(lead, leads, { 
+              checkCity: true, 
+              similarityThreshold: 0.8 
+            });
             
             if (existingLead) {
               // It's a duplicate - add to duplicates list with reference to existing
@@ -98,11 +99,10 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
               setDuplicateLeads(prev => [...prev, duplicateWithRef]);
             } else {
               // Check if it's duplicate within current extraction
-              const isDuplicateInBatch = collectedNewLeads.some(
-                existing => 
-                  existing.company_name.toLowerCase() === lead.company_name.toLowerCase() ||
-                  (existing.handle && lead.handle && existing.handle.toLowerCase() === lead.handle.toLowerCase())
-              );
+              const isDuplicateInBatch = findDuplicateLead(lead, collectedNewLeads as Lead[], {
+                checkCity: true,
+                similarityThreshold: 0.8
+              });
               
               if (!isDuplicateInBatch) {
                 collectedNewLeads.push(lead);
@@ -188,22 +188,32 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
         handle: '@' + trimmed.toLowerCase().replace(/[^a-z0-9]/g, ''),
         city: bulkCity || 'Unknown',
         service_type: detectServiceType(trimmed),
-        lead_source: bulkSource,
-        running_ads: bulkSource === 'FB Ad Library',
+        lead_source: 'FB Ad Library',
+        running_ads: true,
       };
 
       parsedLeads.push(lead as Lead);
     });
 
-    // Filter duplicates
-    const newLeads = parsedLeads.filter(
-      lead => !leads.some(
-        existing => 
-          existing.company_name.toLowerCase() === lead.company_name.toLowerCase()
-      )
-    );
+    // Filter duplicates using improved detection
+    const uniqueLeads: Lead[] = [];
+    const manualDuplicates: Lead[] = [];
+    
+    parsedLeads.forEach(lead => {
+      const existingDupe = findDuplicateLead(lead, leads, {
+        checkCity: true,
+        similarityThreshold: 0.8
+      });
+      
+      if (existingDupe) {
+        manualDuplicates.push({ ...lead, existingId: existingDupe.id } as Lead);
+      } else if (!findDuplicateLead(lead, uniqueLeads, { checkCity: true })) {
+        uniqueLeads.push(lead as Lead);
+      }
+    });
 
-    setPreview(newLeads);
+    setPreview(uniqueLeads);
+    setDuplicateLeads(manualDuplicates);
     setShowPreview(true);
   };
 
@@ -235,6 +245,27 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
       return;
     }
     
+    // Create import operation record
+    const importOperation = await createImportOperation(
+      'bulk_import',
+      bulkSource,
+      leadsToProcess.length,
+      {
+        city: bulkCity,
+        service_type: selectedServiceType,
+        import_mode: importMode,
+        ai_extracted: true,
+        duplicates_found: duplicateLeads.length,
+        new_leads_found: preview.length
+      }
+    );
+    
+    if (!importOperation) {
+      toast.error('Failed to create import operation');
+      setIsProcessing(false);
+      return;
+    }
+    
     // Save all leads in parallel (in batches to avoid overwhelming the server)
     const BATCH_SIZE = 10;
     let successCount = 0;
@@ -256,8 +287,11 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
             updateCount++;
             return true;
           } else {
-            // Save as new lead
-            const savedLead = await saveLead(lead);
+            // Save as new lead with import_operation_id
+            const savedLead = await saveLead({
+              ...lead,
+              import_operation_id: importOperation.id
+            });
             addLead(savedLead);
             return true;
           }
@@ -282,11 +316,42 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
     if (updateMode) {
       toast.success(`Updated ${updateCount} leads successfully!`);
     } else {
-      toast.success(`Imported ${successCount} leads successfully!`);
+      // Store the import operation for undo functionality
+      useLeadStore.getState().setLastImportOperation(importOperation);
+      
+      // Show success with undo option
+      toast((t) => (
+        <div className="flex items-center justify-between gap-4">
+          <span>Imported {successCount} leads successfully!</span>
+          <button
+            onClick={() => {
+              toast.dismiss(t.id);
+              handleUndo();
+            }}
+            className="text-sm font-medium text-blue-600 hover:text-blue-500"
+          >
+            Undo
+          </button>
+        </div>
+      ), {
+        duration: 5000,
+        id: 'import-success'
+      });
     }
     
     onClose();
     resetModal();
+  };
+  
+  const handleUndo = async () => {
+    const { undoLastImport } = useLeadStore.getState();
+    const result = await undoLastImport();
+    
+    if (result.success) {
+      toast.success(`Undone! Removed ${result.deletedCount} leads.`);
+    } else {
+      toast.error('Failed to undo import');
+    }
   };
 
   const resetModal = () => {
@@ -345,12 +410,12 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
               leaveFrom="opacity-100 translate-y-0 sm:scale-100"
               leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
             >
-              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl">
-                <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-900 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-3xl">
+                <div className="bg-white dark:bg-gray-900 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                   <div className="absolute right-0 top-0 pr-4 pt-4">
                     <button
                       type="button"
-                      className="rounded-md bg-white text-gray-400 hover:text-gray-500"
+                      className="rounded-md bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400"
                       onClick={onClose}
                     >
                       <XMarkIcon className="h-6 w-6" />
@@ -359,30 +424,14 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
 
                   <div className="sm:flex sm:items-start">
                     <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                      <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
+                      <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900 dark:text-gray-100">
                         📋 Bulk Import from FB Ad Library
                       </Dialog.Title>
 
                       <div className="mt-4">
-
-                        <div className="mb-4">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Import Source
-                          </label>
-                          <select
-                            value={bulkSource}
-                            onChange={(e) => setBulkSource(e.target.value as 'FB Ad Library' | 'Instagram Manual' | 'Google Maps')}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          >
-                            <option value="Instagram Manual">Instagram Manual</option>
-                            <option value="FB Ad Library">FB Ad Library</option>
-                            <option value="Google Maps">Google Maps</option>
-                          </select>
-                        </div>
-
                         <div className="space-y-4 mb-4">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                               Default City (optional)
                             </label>
                             <USCityAutocomplete
@@ -394,8 +443,8 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
                             />
                           </div>
 
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">
+                          <div className="relative">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                               Service Type (optional)
                             </label>
                             <ServiceTypeDropdown
@@ -408,35 +457,32 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
                         </div>
 
 
-                        {bulkSource === 'FB Ad Library' && (
-                          <KeywordAssistant city={bulkCity} serviceType={selectedServiceType} />
-                        )}
+                        <KeywordAssistant city={bulkCity} serviceType={selectedServiceType} />
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             Paste Your Data:
                           </label>
                           <textarea
                             value={bulkData}
                             onChange={(e) => setBulkData(e.target.value)}
                             rows={10}
-                            placeholder="Paste company names, one per line or comma separated:
+                            placeholder="Paste content from Facebook Ad Library search results here...
 
-Desert Turf Pros
-AZ Synthetic Grass
-Phoenix Landscaping LLC
+The AI will extract:
+• Company names
+• Phone numbers
+• Addresses
+• Ad details
 
-Or paste full data:
-Company Name, City, Service Type
-Desert Turf, Phoenix, Turf
-AZ Painters, Scottsdale, Painting"
-                            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono text-sm"
+Just copy and paste the entire page content!"
+                            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-400"
                           />
                         </div>
 
                         {showPreview && (
-                          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                            <h4 className="font-medium text-gray-900 mb-2">
+                          <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">
                               {isProcessing && streamingMode ? (
                                 <span className="flex items-center gap-2">
                                   <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -460,7 +506,7 @@ AZ Painters, Scottsdale, Painting"
                                   className={`px-3 py-1 text-xs rounded ${
                                     importMode === 'new' 
                                       ? 'bg-blue-600 text-white' 
-                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
                                   }`}
                                 >
                                   Import New Only ({preview.length})
@@ -472,7 +518,7 @@ AZ Painters, Scottsdale, Painting"
                                       className={`px-3 py-1 text-xs rounded ${
                                         importMode === 'update' 
                                           ? 'bg-blue-600 text-white' 
-                                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
                                       }`}
                                     >
                                       Update Existing ({duplicateLeads.length})
@@ -482,7 +528,7 @@ AZ Painters, Scottsdale, Painting"
                                       className={`px-3 py-1 text-xs rounded ${
                                         importMode === 'all' 
                                           ? 'bg-blue-600 text-white' 
-                                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
                                       }`}
                                     >
                                       Import All ({preview.length + duplicateLeads.length})
@@ -495,19 +541,19 @@ AZ Painters, Scottsdale, Painting"
                             <div className="max-h-48 overflow-y-auto space-y-2">
                               {/* Show new leads */}
                               {preview.map((lead, idx) => (
-                                <div key={`new-${idx}`} className="text-sm animate-fade-in animate-slide-in">
+                                <div key={`new-${idx}`} className="text-sm animate-fade-in animate-slide-in text-gray-800 dark:text-gray-200">
                                   ✅ {lead.company_name} - {lead.city} ({lead.service_type})
                                   {lead.phone && ` - 📞 ${lead.phone}`}
-                                  <span className="ml-2 text-xs text-green-600 font-medium">[NEW]</span>
+                                  <span className="ml-2 text-xs text-green-600 dark:text-green-400 font-medium">[NEW]</span>
                                 </div>
                               ))}
                               
                               {/* Show duplicate leads */}
                               {duplicateLeads.map((lead, idx) => (
-                                <div key={`dup-${idx}`} className="text-sm animate-fade-in animate-slide-in opacity-75">
+                                <div key={`dup-${idx}`} className="text-sm animate-fade-in animate-slide-in opacity-75 text-gray-700 dark:text-gray-300">
                                   🔄 {lead.company_name} - {lead.city} ({lead.service_type})
                                   {lead.phone && ` - 📞 ${lead.phone}`}
-                                  <span className="ml-2 text-xs text-orange-600 font-medium">[DUPLICATE - Already exists]</span>
+                                  <span className="ml-2 text-xs text-orange-600 dark:text-orange-400 font-medium">[DUPLICATE - Already exists]</span>
                                 </div>
                               ))}
                               
@@ -517,10 +563,10 @@ AZ Painters, Scottsdale, Painting"
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                   </svg>
-                                  <div className="text-sm text-gray-600 font-medium">
+                                  <div className="text-sm text-gray-600 dark:text-gray-300 font-medium">
                                     AI is analyzing your data...
                                   </div>
-                                  <div className="text-xs text-gray-500 mt-1">
+                                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                     This may take a moment for large datasets
                                   </div>
                                 </div>
@@ -533,7 +579,7 @@ AZ Painters, Scottsdale, Painting"
                   </div>
                 </div>
 
-                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
                   {showPreview && preview.length > 0 && (
                     <button
                       type="button"

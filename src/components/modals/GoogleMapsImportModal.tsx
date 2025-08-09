@@ -6,8 +6,11 @@ import { useLeadStore } from '@/lib/store';
 import { saveLead, mergeLeadData } from '@/lib/api';
 import { Lead } from '@/types';
 import toast from 'react-hot-toast';
+import { createImportOperation } from '@/lib/import-operations-api';
+import { trackImportMetrics } from '@/lib/market-coverage-api';
 import USCityAutocomplete from '../USCityAutocomplete';
 import ServiceTypeDropdown from '../ServiceTypeDropdown';
+import { useRefreshLeads } from '@/hooks/useLeadsQuery';
 
 interface GoogleMapsImportModalProps {
   open: boolean;
@@ -53,6 +56,7 @@ interface CostEstimate {
 
 export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImportModalProps) {
   const { addLead, leads, updateLead } = useLeadStore();
+  const refreshLeads = useRefreshLeads();
   const [serviceType, setServiceType] = useState('');
   const [city, setCity] = useState('');
   const [radius, setRadius] = useState(10); // km
@@ -61,22 +65,36 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [hasSearched, setHasSearched] = useState(false);
   const [apiKeyError, setApiKeyError] = useState(false);
-  const [searchMode, setSearchMode] = useState<'standard' | 'apify'>('standard');
+  const [searchMode, setSearchMode] = useState<'standard' | 'apify'>('apify');
   const [maxResults, setMaxResults] = useState(100); // Default to reasonable number
   const [includeReviews, setIncludeReviews] = useState(false);
   const [includeContacts, setIncludeContacts] = useState(false);
   const [includeImages, setIncludeImages] = useState(false);
   const [onlyNoWebsite, setOnlyNoWebsite] = useState(false);
   const [costEstimate, setCostEstimate] = useState<CostEstimate | null>(null);
-  const [previousSearches, setPreviousSearches] = useState<any[]>([]);
-  const [showPreviousSearches, setShowPreviousSearches] = useState(false);
-  const [isLoadingPreviousSearches, setIsLoadingPreviousSearches] = useState(false);
   const [showApifyImport, setShowApifyImport] = useState(false);
   const [apifyRunId, setApifyRunId] = useState('');
   const [isImportingApify, setIsImportingApify] = useState(false);
   const [currentSearchId, setCurrentSearchId] = useState<string | null>(null);
   const [hideNonContractors, setHideNonContractors] = useState(false);
   const [autoSelectContractors, setAutoSelectContractors] = useState(true);
+  
+  // Check URL parameters when modal opens
+  useEffect(() => {
+    if (open && typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlServiceType = params.get('service_type');
+      const urlMarketName = params.get('market_name');
+      
+      if (urlServiceType) {
+        setServiceType(urlServiceType);
+      }
+      
+      if (urlMarketName) {
+        setCity(urlMarketName);
+      }
+    }
+  }, [open]);
 
   // Keywords that indicate equipment/supply businesses (not contractors)
   const nonContractorKeywords = [
@@ -126,27 +144,7 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
     return 'unknown';
   };
 
-  // Load previous searches when modal opens
-  useEffect(() => {
-    if (open) {
-      loadPreviousSearches();
-    }
-  }, [open]);
 
-  const loadPreviousSearches = async () => {
-    setIsLoadingPreviousSearches(true);
-    try {
-      const response = await fetch('/api/search-results?searchType=google_maps&limit=10');
-      const data = await response.json();
-      if (response.ok) {
-        setPreviousSearches(data.results || []);
-      }
-    } catch (error) {
-      console.error('Error loading previous searches:', error);
-    } finally {
-      setIsLoadingPreviousSearches(false);
-    }
-  };
 
   const saveSearchResults = async (searchResults: PlaceResult[], searchParams: any, mode: string, estimate?: CostEstimate | null, searchDuration?: number, apifyRunId?: string) => {
     try {
@@ -167,53 +165,13 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
       if (response.ok) {
         const data = await response.json();
         setCurrentSearchId(data.id);
-        // Reload previous searches to include the new one
-        loadPreviousSearches();
       }
     } catch (error) {
       console.error('Error saving search results:', error);
     }
   };
 
-  const loadSavedSearch = (savedSearch: any) => {
-    // Load the search parameters
-    setServiceType(savedSearch.search_params.serviceType || '');
-    setCity(savedSearch.search_params.city || '');
-    setRadius(savedSearch.search_params.radius ? savedSearch.search_params.radius / 1000 : 10);
-    setSearchMode(savedSearch.search_mode || 'standard');
-    
-    // Load the results
-    setResults(savedSearch.results);
-    setCostEstimate(savedSearch.cost_estimate);
-    setHasSearched(true);
-    setShowPreviousSearches(false);
-    
-    // Auto-select high opportunity leads
-    const highOpportunityIds = new Set<string>(
-      savedSearch.results
-        .filter((r: PlaceResult) => r.opportunity_score >= 80)
-        .map((r: PlaceResult) => r.place_id)
-    );
-    setSelectedIds(highOpportunityIds);
-    
-    toast.success('Previous search loaded!');
-  };
 
-  const deleteSavedSearch = async (id: string) => {
-    try {
-      const response = await fetch(`/api/search-results?id=${id}`, {
-        method: 'DELETE'
-      });
-      
-      if (response.ok) {
-        setPreviousSearches(prev => prev.filter(s => s.id !== id));
-        toast.success('Search deleted');
-      }
-    } catch (error) {
-      console.error('Error deleting search:', error);
-      toast.error('Failed to delete search');
-    }
-  };
 
   const handleApifyImport = async () => {
     if (!apifyRunId.trim()) {
@@ -226,21 +184,104 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
       const response = await fetch('/api/apify-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId: apifyRunId.trim() })
+        body: JSON.stringify({ 
+          runId: apifyRunId.trim()
+        })
       });
 
       const data = await response.json();
 
       if (!response.ok) {
+        if (response.status === 409 && data.existingImport) {
+          // Import already exists or in progress
+          if (data.existingImport.status === 'completed') {
+            // Check if this was a failed import (0 leads imported)
+            if (data.existingImport.leadsImported === 0) {
+              toast((t) => (
+                <div className="flex flex-col gap-2">
+                  <span>This import failed previously. Would you like to retry?</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        toast.dismiss(t.id);
+                        // Reset the import status
+                        try {
+                          const resetResponse = await fetch('/api/reset-failed-import', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ searchResultId: data.existingImport.id })
+                          });
+                          
+                          if (resetResponse.ok) {
+                            toast.success('Import reset. Please try again.');
+                            // Retry the import
+                            setTimeout(() => handleApifyImport(), 500);
+                          } else {
+                            toast.error('Failed to reset import');
+                          }
+                        } catch (error) {
+                          toast.error('Failed to reset import');
+                        }
+                      }}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-500"
+                    >
+                      Retry Import
+                    </button>
+                    <button
+                      onClick={() => toast.dismiss(t.id)}
+                      className="text-sm font-medium text-gray-600 hover:text-gray-500"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ), {
+                duration: 10000
+              });
+            } else {
+              toast((t) => (
+                <div className="flex flex-col gap-3">
+                  <span className="font-medium">This Apify run has already been imported ({data.existingImport.leadsImported} leads)</span>
+                  <button
+                    onClick={async () => {
+                      toast.dismiss(t.id);
+                      await handleResetAllImports();
+                      // Retry after reset
+                      setTimeout(() => handleApifyImport(), 500);
+                    }}
+                    className="self-start px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+                  >
+                    Reset Import Records & Retry
+                  </button>
+                </div>
+              ), {
+                duration: 15000
+              });
+            }
+          } else if (data.existingImport.status === 'processing') {
+            toast.error('This import is already in progress. Please wait for it to complete.');
+          }
+          setIsImportingApify(false);
+          return;
+        }
         if (data.setupInstructions) {
           setApiKeyError(true);
         }
+        console.error('Apify import error details:', data);
         throw new Error(data.error || 'Import failed');
       }
 
+      // Store the saved search ID for the import process
+      setCurrentSearchId(data.savedSearchId);
+      
       setResults(data.results);
       setHasSearched(true);
       setShowApifyImport(false);
+      
+      // Show import status
+      if (data.importStatus) {
+        toast.success(data.importStatus.message);
+      }
       
       // Auto-select based on preferences
       if (autoSelectContractors) {
@@ -266,9 +307,6 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
       toast.success(`Imported ${data.count} businesses from Apify!`);
       
       // Reload previous searches to include the imported one
-      if (data.savedSearchId) {
-        loadPreviousSearches();
-      }
     } catch (error) {
       console.error('Import error:', error);
       toast.error(error instanceof Error ? error.message : 'Import failed');
@@ -490,6 +528,98 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
   };
 
   const handleImport = async () => {
+    // If we have a saved search ID from Apify import, use the new two-step process
+    if (currentSearchId && searchMode === 'apify') {
+      const toastId = toast.loading('Processing import...');
+      try {
+        const response = await fetch('/api/apify-import-process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ searchResultId: currentSearchId })
+        });
+
+        let data;
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          console.error('Failed to parse response JSON:', jsonError);
+          console.error('Response status:', response.status);
+          console.error('Response text:', await response.text());
+          throw new Error(`Server error: ${response.status}`);
+        }
+
+        if (!response.ok) {
+          console.error('Import API error:', {
+            status: response.status,
+            data,
+            error: data.error,
+            details: data.details
+          });
+          
+          if (response.status === 409) {
+            toast.error(data.error, { id: toastId });
+            return;
+          }
+          throw new Error(data.error || data.details || 'Import failed');
+        }
+
+        toast.dismiss(toastId);
+        
+        if (data.imported > 0) {
+          // Store the import operation for undo functionality
+          const importOp = {
+            id: data.importOperationId,
+            lead_count: data.imported
+          };
+          useLeadStore.getState().setLastImportOperation(importOp);
+          
+          // Show success with undo option
+          toast((t) => (
+            <div className="flex items-center justify-between gap-4">
+              <span>Successfully imported {data.imported} leads!</span>
+              <button
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  handleUndo();
+                }}
+                className="text-sm font-medium text-blue-600 hover:text-blue-500"
+              >
+                Undo
+              </button>
+            </div>
+          ), {
+            duration: 5000,
+            id: 'apify-import-success'
+          });
+          
+          // Refresh leads to show the imported data immediately
+          refreshLeads();
+          
+          // Trigger market coverage update in the background
+          fetch('/api/fix-market-coverage', { method: 'POST' })
+            .then(response => {
+              if (response.ok) {
+                console.log('Market coverage updated after Apify import');
+              }
+            })
+            .catch(error => {
+              console.error('Failed to update market coverage:', error);
+            });
+        } else {
+          toast.error(`Import failed: ${data.failed} errors`, { id: toastId });
+        }
+        
+        onClose();
+        resetModal();
+        return;
+      } catch (error) {
+        console.error('Import process error:', error);
+        toast.error(error instanceof Error ? error.message : 'Import failed', { id: toastId });
+        return;
+      }
+    }
+
+    // Original import logic for non-Apify searches
     const selectedResults = results.filter(r => selectedIds.has(r.place_id));
     
     if (selectedResults.length === 0) {
@@ -498,12 +628,71 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
     }
 
     let successCount = 0;
+    let duplicateCount = 0;
     const importedLeadIds: string[] = [];
     const toastId = toast.loading(`Importing ${selectedResults.length} leads...`);
+    
+    // Extract city and state for market detection
+    const cityParts = city.split(',').map(part => part.trim());
+    const cityName = cityParts[0];
+    const stateName = cityParts.length > 1 ? cityParts[cityParts.length - 1] : '';
+    
+    // Determine market ID and name
+    let marketId = '';
+    let marketName = '';
+    let marketType = '';
+    
+    if (stateName && cityName) {
+      // City-level market
+      marketId = `city-${cityName}-${stateName}`;
+      marketName = `${cityName}, ${stateName}`;
+      marketType = 'city';
+    } else if (stateName) {
+      // State-level market
+      marketId = `state-${stateName}`;
+      marketName = stateName;
+      marketType = 'state';
+    }
+
+    // Create import operation record with phase tracking
+    const importOperation = await createImportOperation(
+      'google_maps_import',
+      'Google Maps',
+      selectedResults.length,
+      {
+        city: city,
+        service_type: serviceType,
+        search_mode: searchMode,
+        radius: radius,
+        max_results: maxResults,
+        selected_count: selectedResults.length,
+        // Phase tracking metadata
+        phase: 1,
+        market_id: marketId,
+        market_name: marketName,
+        coverage_context: {
+          service_type: serviceType,
+          search_query: `${serviceType} in ${city}`
+        }
+      }
+    );
+    
+    if (!importOperation) {
+      toast.error('Failed to create import operation', { id: toastId });
+      return;
+    }
 
     for (const result of selectedResults) {
-      // Use city from search form
-      const leadCity = city;
+      // Use city from search form and extract state
+      let leadCity = city;
+      let leadState = null;
+      
+      // Extract state from city string (e.g., "Amarillo, TX" -> "TX")
+      const cityParts = city.split(',').map(part => part.trim());
+      if (cityParts.length > 1) {
+        leadCity = cityParts[0]; // Just the city name
+        leadState = cityParts[cityParts.length - 1]; // The state abbreviation
+      }
       
       // Extract Instagram handle if available
       let instagramHandle = null;
@@ -526,12 +715,14 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
       );
 
       if (existingLead) {
+        duplicateCount++;
         // Merge data instead of skipping
         try {
           const mergedLead = await mergeLeadData(existingLead, {
             company_name: result.import_ready.company_name,
             service_type: result.import_ready.service_type,
             city: leadCity,
+            state: leadState,
             phone: result.import_ready.phone,
             website: result.import_ready.website,
             google_maps_url: `https://www.google.com/maps/place/?q=place_id:${result.place_id}`,
@@ -563,7 +754,7 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
           company_name: result.import_ready.company_name,
           service_type: result.import_ready.service_type,
           city: leadCity,
-          state: null,
+          state: leadState,
           phone: result.import_ready.phone,
           email: result.emails && result.emails.length > 0 ? result.emails[0] : null,
           instagram_url: instagramUrl,
@@ -579,8 +770,7 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                  result.opportunity_score >= 80 ? 'A+' : 
                  result.opportunity_score >= 70 ? 'A' : 
                  result.opportunity_score >= 60 ? 'B' : 'C',
-          dm_sent: false,
-          called: false,
+          import_operation_id: importOperation.id,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -614,10 +804,95 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
       }
     }
 
+    // Track import metrics for saturation detection
+    if (marketId && importOperation) {
+      await trackImportMetrics(
+        marketId,
+        1, // Phase 1 for Google Maps
+        importOperation.id,
+        {
+          totalFound: selectedResults.length,
+          duplicates: duplicateCount,
+          imported: successCount,
+          serviceType: serviceType,
+          searchQuery: `${serviceType} in ${city}`
+        }
+      );
+    }
+
     toast.dismiss(toastId);
-    toast.success(`Successfully imported ${successCount} new leads!`);
+    
+    if (successCount > 0) {
+      // Store the import operation for undo functionality
+      useLeadStore.getState().setLastImportOperation(importOperation);
+      
+      // Show success with undo option
+      toast((t) => (
+        <div className="flex items-center justify-between gap-4">
+          <span>Successfully imported {successCount} new leads!</span>
+          <button
+            onClick={() => {
+              toast.dismiss(t.id);
+              handleUndo();
+            }}
+            className="text-sm font-medium text-blue-600 hover:text-blue-500"
+          >
+            Undo
+          </button>
+        </div>
+      ), {
+        duration: 5000,
+        id: 'google-maps-import-success'
+      });
+      
+      // Refresh leads to show the imported data immediately
+      refreshLeads();
+      
+      // Trigger market coverage update in the background
+      fetch('/api/fix-market-coverage', { method: 'POST' })
+        .then(response => {
+          if (response.ok) {
+            console.log('Market coverage updated after import');
+          }
+        })
+        .catch(error => {
+          console.error('Failed to update market coverage:', error);
+        });
+    } else {
+      toast.error('No leads were imported');
+    }
+    
     onClose();
     resetModal();
+  };
+  
+  const handleUndo = async () => {
+    const { undoLastImport } = useLeadStore.getState();
+    const result = await undoLastImport();
+    
+    if (result.success) {
+      toast.success(`Undone! Removed ${result.deletedCount} leads.`);
+    } else {
+      toast.error('Failed to undo import');
+    }
+  };
+
+  const handleResetAllImports = async () => {
+    try {
+      const response = await fetch('/api/reset-all-imports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        toast.success(data.message || 'All imports have been reset');
+      } else {
+        toast.error('Failed to reset imports');
+      }
+    } catch (error) {
+      toast.error('Failed to reset imports');
+    }
   };
 
   const resetModal = () => {
@@ -629,7 +904,6 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
     setApiKeyError(false);
     setSearchMode('standard');
     setCostEstimate(null);
-    setShowPreviousSearches(false);
     setShowApifyImport(false);
     setApifyRunId('');
     setRadius(10);
@@ -667,46 +941,34 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
               leaveFrom="opacity-100 translate-y-0 sm:scale-100"
               leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
             >
-              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-[#1F2937] text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-6xl">
-                <div className="bg-[#1F2937] px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-                  <div className="absolute right-0 top-0 pr-4 pt-4">
+              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-[#1F2937] text-left shadow-xl transition-all sm:my-4 sm:w-full sm:max-w-3xl">
+                <div className="bg-[#1F2937] px-3 pb-3 pt-3 sm:p-4">
+                  <div className="absolute right-0 top-0 pr-3 pt-3">
                     <button
                       type="button"
                       className="rounded-md bg-[#1F2937] text-gray-400 hover:text-gray-300"
                       onClick={onClose}
                     >
-                      <XMarkIcon className="h-6 w-6" />
+                      <XMarkIcon className="h-5 w-5" />
                     </button>
                   </div>
 
                   <div className="sm:flex sm:items-start">
-                    <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                      <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-white">
-                        <MapPinIcon className="inline-block h-6 w-6 mr-2 text-[#3B82F6]" />
+                    <div className="mt-2 text-center sm:mt-0 sm:text-left w-full">
+                      <Dialog.Title as="h3" className="text-base font-semibold leading-5 text-white">
+                        <MapPinIcon className="inline-block h-5 w-5 mr-1.5 text-[#3B82F6]" />
                         Google Maps Business Search
                       </Dialog.Title>
 
-                      {/* Previous Searches Button */}
-                      {previousSearches.length > 0 && !hasSearched && (
-                        <div className="mt-4">
-                          <button
-                            onClick={() => setShowPreviousSearches(!showPreviousSearches)}
-                            className="inline-flex items-center px-3 py-1.5 border border-[#374151] text-sm font-medium rounded-md text-gray-300 bg-[#111827] hover:bg-[#1F2937]"
-                          >
-                            <ClockIcon className="h-4 w-4 mr-2" />
-                            Previous Searches ({previousSearches.length})
-                          </button>
-                        </div>
-                      )}
 
                       {/* Import from Apify Button */}
                       {!hasSearched && (
-                        <div className="mt-4">
+                        <div className="mt-2">
                           <button
                             onClick={() => setShowApifyImport(!showApifyImport)}
-                            className="inline-flex items-center px-3 py-1.5 border border-[#374151] text-sm font-medium rounded-md text-gray-300 bg-[#111827] hover:bg-[#1F2937]"
+                            className="inline-flex items-center px-2 py-1 border border-[#374151] text-xs font-medium rounded text-gray-300 bg-[#111827] hover:bg-[#1F2937]"
                           >
-                            <svg className="h-4 w-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <svg className="h-3 w-3 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
                             </svg>
                             Import from Apify
@@ -714,103 +976,27 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                         </div>
                       )}
 
-                      {/* Previous Searches List */}
-                      {showPreviousSearches && (
-                        <div className="mt-4 bg-[#111827] rounded-lg p-4 max-h-60 overflow-y-auto">
-                          <h4 className="text-sm font-medium text-gray-300 mb-3">Recent Searches (Last 7 days)</h4>
-                          {isLoadingPreviousSearches ? (
-                            <p className="text-sm text-gray-400">Loading...</p>
-                          ) : (
-                            <div className="space-y-3">
-                              {previousSearches.map((search) => {
-                                const daysAgo = Math.floor((Date.now() - new Date(search.created_at).getTime()) / (1000 * 60 * 60 * 24));
-                                const hoursAgo = Math.floor((Date.now() - new Date(search.created_at).getTime()) / (1000 * 60 * 60));
-                                const timeAgo = daysAgo > 0 ? `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago` : `${hoursAgo} hour${hoursAgo !== 1 ? 's' : ''} ago`;
-                                
-                                return (
-                                  <div
-                                    key={search.id}
-                                    className="flex items-center justify-between p-3 bg-[#1F2937] rounded-md hover:bg-[#374151] transition-colors"
-                                  >
-                                    <div className="flex-1">
-                                      <p className="text-sm text-white font-medium">
-                                        {search.search_params.serviceType} in {search.search_params.city}
-                                      </p>
-                                      <p className="text-xs text-gray-400 mt-1">
-                                        {search.result_count} results • {timeAgo}
-                                        {search.search_mode === 'apify' && ' • Apify'}
-                                        {search.search_duration_seconds && ` • ${search.search_duration_seconds}s`}
-                                      </p>
-                                      {search.emails_found > 0 && (
-                                        <p className="text-xs text-[#10B981] mt-1">
-                                          📧 {search.emails_found} emails • 📞 {search.contacts_found} contacts
-                                        </p>
-                                      )}
-                                      {search.high_quality_leads > 0 && (
-                                        <p className="text-xs text-[#EAB308] mt-1">
-                                          ⭐ {search.high_quality_leads} high-quality leads
-                                        </p>
-                                      )}
-                                      {search.imported_lead_ids?.length > 0 && (
-                                        <p className="text-xs text-[#3B82F6] mt-1">
-                                          ✓ {search.imported_lead_ids.length} imported
-                                        </p>
-                                      )}
-                                      {search.total_cost && (
-                                        <p className="text-xs text-gray-500 mt-1">
-                                          💰 ${search.total_cost.toFixed(3)}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-2 ml-4">
-                                      <button
-                                        onClick={() => loadSavedSearch(search)}
-                                        className="text-sm text-[#3B82F6] hover:text-[#60A5FA]"
-                                      >
-                                        Load
-                                      </button>
-                                      <button
-                                        onClick={() => window.open(`/api/search-results/export?id=${search.id}`, '_blank')}
-                                        className="text-sm text-[#10B981] hover:text-[#34D399]"
-                                        title="Export to CSV"
-                                      >
-                                        CSV
-                                      </button>
-                                      <button
-                                        onClick={() => deleteSavedSearch(search.id)}
-                                        className="text-sm text-[#EF4444] hover:text-[#F87171]"
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
 
                       {/* Import from Apify Form */}
                       {showApifyImport && (
-                        <div className="mt-4 bg-[#111827] rounded-lg p-4">
-                          <h4 className="text-sm font-medium text-gray-300 mb-3">Import from Apify Run</h4>
-                          <p className="text-xs text-gray-400 mb-3">
+                        <div className="mt-2 bg-[#111827] rounded p-3">
+                          <h4 className="text-xs font-medium text-gray-300 mb-2">Import from Apify Run</h4>
+                          <p className="text-xs text-gray-400 mb-2">
                             Enter the run ID from your Apify Google Maps Scraper run (e.g., cj0hg4MwJnfX0Qz2C)
                           </p>
-                          <div className="flex gap-2">
+                          <div className="flex gap-1.5">
                             <input
                               type="text"
                               value={apifyRunId}
                               onChange={(e) => setApifyRunId(e.target.value)}
                               placeholder="Enter Apify run ID"
-                              className="flex-1 rounded-md bg-[#1F2937] border-[#374151] text-white px-3 py-2"
+                              className="flex-1 rounded bg-[#1F2937] border-[#374151] text-white text-xs px-2 py-1.5"
                               disabled={isImportingApify}
                             />
                             <button
                               onClick={handleApifyImport}
                               disabled={isImportingApify || !apifyRunId.trim()}
-                              className="px-4 py-2 bg-[#3B82F6] text-white rounded-md hover:bg-[#2563EB] disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="px-3 py-1.5 bg-[#3B82F6] text-white text-xs rounded hover:bg-[#2563EB] disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {isImportingApify ? 'Importing...' : 'Import'}
                             </button>
@@ -819,85 +1005,52 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                                 setShowApifyImport(false);
                                 setApifyRunId('');
                               }}
-                              className="px-4 py-2 bg-[#374151] text-gray-300 rounded-md hover:bg-[#4B5563]"
+                              className="px-3 py-1.5 bg-[#374151] text-gray-300 text-xs rounded hover:bg-[#4B5563]"
                             >
                               Cancel
                             </button>
                           </div>
-                          <p className="text-xs text-gray-500 mt-2">
+                          <p className="text-xs text-gray-500 mt-1.5">
                             💡 Find the run ID in your Apify console under the run details
                           </p>
                         </div>
                       )}
 
-                      {/* Search Mode Selection */}
-                      <div className="mt-4 bg-[#374151]/30 rounded-lg p-4">
-                        <div className="flex items-center gap-6">
-                          <label className="flex items-center cursor-pointer">
-                            <input
-                              type="radio"
-                              name="searchMode"
-                              value="standard"
-                              checked={searchMode === 'standard'}
-                              onChange={(e) => setSearchMode(e.target.value as 'standard' | 'apify')}
-                              className="mr-2 text-[#3B82F6] focus:ring-[#3B82F6]"
-                            />
-                            <div>
-                              <span className="text-white font-medium">Quick Search</span>
-                              <span className="text-gray-400 text-sm ml-2">(Free, up to 60 results)</span>
-                            </div>
-                          </label>
-                          <label className="flex items-center cursor-pointer">
-                            <input
-                              type="radio"
-                              name="searchMode"
-                              value="apify"
-                              checked={searchMode === 'apify'}
-                              onChange={(e) => setSearchMode(e.target.value as 'standard' | 'apify')}
-                              className="mr-2 text-[#3B82F6] focus:ring-[#3B82F6]"
-                            />
-                            <div>
-                              <span className="text-white font-medium">Comprehensive Search</span>
-                              <span className="text-gray-400 text-sm ml-2">(Apify, unlimited results + enrichment)</span>
-                            </div>
-                          </label>
-                        </div>
-                      </div>
 
                       {/* Search Form */}
-                      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-4">
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
                         <div className="sm:col-span-2">
-                          <label className="block text-sm font-medium text-gray-300">
+                          <label className="block text-xs font-medium text-gray-300">
                             Service Type
                           </label>
                           <ServiceTypeDropdown
                             value={serviceType}
                             onChange={setServiceType}
-                            placeholder="e.g., HVAC, Plumbing, Landscaping..."
-                            className="mt-1 block w-full rounded-md bg-[#111827] border-[#374151] text-white"
+                            placeholder="Search SMB acquisition targets..."
+                            className="mt-0.5 block w-full rounded bg-[#111827] border-[#374151] text-white text-xs"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-300">
+                          <label className="block text-xs font-medium text-gray-300">
                             City
                           </label>
                           <USCityAutocomplete
                             value={city}
                             onChange={setCity}
                             placeholder="e.g., Phoenix, AZ"
-                            className="mt-1 block w-full rounded-md bg-[#111827] border-[#374151] text-white"
+                            className="mt-0.5 block w-full rounded bg-[#111827] border-[#374151] text-white text-xs"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-300">
+                          <label className="block text-xs font-medium text-gray-300">
                             Radius (km)
                           </label>
                           <select
                             value={radius}
                             onChange={(e) => setRadius(Number(e.target.value))}
-                            className="mt-1 block w-full rounded-md bg-[#111827] border-[#374151] text-white"
+                            className="mt-0.5 block w-full rounded bg-[#111827] border-[#374151] text-white text-xs py-1.5"
                           >
                             <option value={5}>5 km</option>
                             <option value={10}>10 km</option>
@@ -909,12 +1062,12 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
 
                       {/* Apify Options */}
                       {searchMode === 'apify' && (
-                        <div className="mt-4 bg-[#374151]/30 rounded-lg p-4 space-y-3">
-                          <h4 className="text-sm font-medium text-[#60A5FA]">Enhanced Options</h4>
+                        <div className="mt-2 bg-[#374151]/30 rounded p-2.5 space-y-2">
+                          <h4 className="text-xs font-medium text-[#60A5FA]">Enhanced Options</h4>
                           
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-2 gap-2">
                             <div>
-                              <label className="block text-sm font-medium text-gray-300">
+                              <label className="block text-xs font-medium text-gray-300">
                                 Maximum Results
                               </label>
                               <input
@@ -924,38 +1077,38 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                                 min="10"
                                 max="9999"
                                 placeholder="Leave empty for ALL results"
-                                className="mt-1 block w-full rounded-md bg-[#111827] border-[#374151] text-white"
+                                className="mt-0.5 block w-full rounded bg-[#111827] border-[#374151] text-white text-xs py-1"
                               />
-                              <p className="mt-1 text-xs text-gray-400">
+                              <p className="mt-0.5 text-xs text-gray-400">
                                 Leave empty or set to 9999 to get ALL businesses in the area
                               </p>
                             </div>
                             
-                            <div className="flex items-center space-x-4">
+                            <div className="flex items-center space-x-3">
                               <label className="flex items-center cursor-pointer">
                                 <input
                                   type="checkbox"
                                   checked={onlyNoWebsite}
                                   onChange={(e) => setOnlyNoWebsite(e.target.checked)}
-                                  className="mr-2 text-[#3B82F6] focus:ring-[#3B82F6]"
+                                  className="mr-1.5 text-[#3B82F6] focus:ring-[#3B82F6] h-3 w-3"
                                 />
-                                <span className="text-sm text-gray-300">Filter: Only show businesses without websites</span>
+                                <span className="text-xs text-gray-300">Filter: Only show businesses without websites</span>
                               </label>
                             </div>
                           </div>
                           
-                          <div className="space-y-2">
+                          <div className="space-y-1">
                             <label className="flex items-center cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={includeContacts}
                                 onChange={(e) => setIncludeContacts(e.target.checked)}
-                                className="mr-2 text-[#3B82F6] focus:ring-[#3B82F6]"
+                                className="mr-1.5 text-[#3B82F6] focus:ring-[#3B82F6] h-3 w-3"
                               />
-                              <span className="text-sm text-gray-300">📧 Extract contact emails & social media (+$2/1000)</span>
+                              <span className="text-xs text-gray-300">📧 Extract contact emails & social media (+$2/1000)</span>
                             </label>
                             {includeContacts && (
-                              <p className="ml-6 text-xs text-[#FCD34D] mt-1">
+                              <p className="ml-5 text-xs text-[#FCD34D] mt-0.5">
                                 ⚠️ Contact extraction visits each website and may take 5-10 minutes
                               </p>
                             )}
@@ -965,9 +1118,9 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                                 type="checkbox"
                                 checked={includeReviews}
                                 onChange={(e) => setIncludeReviews(e.target.checked)}
-                                className="mr-2 text-[#3B82F6] focus:ring-[#3B82F6]"
+                                className="mr-1.5 text-[#3B82F6] focus:ring-[#3B82F6] h-3 w-3"
                               />
-                              <span className="text-sm text-gray-300">⭐ Include reviews (+$0.50/1000 reviews)</span>
+                              <span className="text-xs text-gray-300">⭐ Include reviews (+$0.50/1000 reviews)</span>
                             </label>
                             
                             <label className="flex items-center cursor-pointer">
@@ -975,46 +1128,43 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                                 type="checkbox"
                                 checked={includeImages}
                                 onChange={(e) => setIncludeImages(e.target.checked)}
-                                className="mr-2 text-[#3B82F6] focus:ring-[#3B82F6]"
+                                className="mr-1.5 text-[#3B82F6] focus:ring-[#3B82F6] h-3 w-3"
                               />
-                              <span className="text-sm text-gray-300">📸 Include images (+$0.50/1000 images)</span>
+                              <span className="text-xs text-gray-300">📸 Include images (+$0.50/1000 images)</span>
                             </label>
                           </div>
                         </div>
                       )}
 
-                      <div className="mt-4">
+                      <div className="mt-2">
                         <button
                           onClick={handleSearch}
                           disabled={isSearching || !serviceType || !city}
-                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-black bg-[#EAB308] hover:bg-[#D97706] disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-black bg-[#EAB308] hover:bg-[#D97706] disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <MagnifyingGlassIcon className="h-5 w-5 mr-2" />
-                          {isSearching ? (
-                            searchMode === 'apify' ? 
-                              (includeContacts ? 'Extracting contacts (this may take a few minutes)...' : 'Running Apify scraper...') : 
-                              'Searching...'
-                          ) : (
-                            searchMode === 'apify' ? 'Search with Apify' : 'Search Google Maps'
-                          )}
+                          <MagnifyingGlassIcon className="h-4 w-4 mr-1.5" />
+                          {isSearching ? 
+                            (includeContacts ? 'Extracting contacts...' : 'Running Apify...') : 
+                            'Search with Apify'
+                          }
                         </button>
                       </div>
 
                       {/* API Key Error */}
                       {apiKeyError && (
-                        <div className="mt-4 p-4 bg-[#EF4444]/10 border border-[#EF4444] rounded-lg">
-                          <h4 className="text-sm font-medium text-[#EF4444]">Google Maps API Key Required</h4>
-                          <p className="mt-1 text-sm text-gray-300">
+                        <div className="mt-2 p-2 bg-[#EF4444]/10 border border-[#EF4444] rounded">
+                          <h4 className="text-xs font-medium text-[#EF4444]">Google Maps API Key Required</h4>
+                          <p className="mt-0.5 text-xs text-gray-300">
                             To use this feature, add your Google Maps API key to your .env.local file:
                           </p>
-                          <pre className="mt-2 p-2 bg-[#111827] rounded text-xs text-gray-400">
+                          <pre className="mt-1 p-1 bg-[#111827] rounded text-xs text-gray-400">
                             GOOGLE_MAPS_API_KEY=your_api_key_here
                           </pre>
                           <a
                             href="https://developers.google.com/maps/documentation/places/web-service/get-api-key"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-2 inline-block text-sm text-[#60A5FA] hover:text-[#93BBFC]"
+                            className="mt-1 inline-block text-xs text-[#60A5FA] hover:text-[#93BBFC]"
                           >
                             Get an API key →
                           </a>
@@ -1023,29 +1173,24 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
 
                       {/* Results */}
                       {results.length > 0 && (
-                        <div className="space-y-4">
+                        <div className="space-y-2">
                                       <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-white">
+                <h3 className="text-sm font-semibold text-white">
                   Found {results.length} businesses
                 </h3>
-                <p className="text-sm text-gray-400">
-                  {searchMode === 'standard' ? (
-                    <>Google Maps returns up to 60 results per search. 
-                    {results.length === 60 && ' Try different search terms or areas to find more.'}</>
-                  ) : (
-                    <>Comprehensive search with enriched data from Apify.</>
-                  )}
+                <p className="text-xs text-gray-400">
+                  Comprehensive search with enriched data from Apify.
                 </p>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-gray-400">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">
                   {selectedIds.size} selected
                 </span>
-                <div className="flex gap-2">
+                <div className="flex gap-1">
                   <button
                     onClick={selectAll}
-                    className="text-sm text-[#60A5FA] hover:text-[#93BBFC]"
+                    className="text-xs text-[#60A5FA] hover:text-[#93BBFC]"
                   >
                     Select All
                   </button>
@@ -1108,7 +1253,7 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
               </div>
             </div>
 
-                          <div className="max-h-96 overflow-y-auto border border-[#374151] rounded-lg">
+                          <div className="max-h-64 overflow-y-auto border border-[#374151] rounded">
                             {results
                               .filter((result) => {
                                 // Apply filter if hideNonContractors is true
@@ -1131,7 +1276,7 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                               return (
                                 <div
                                   key={result.place_id}
-                                  className={`p-4 border-b border-[#374151] last:border-b-0 cursor-pointer transition-colors ${
+                                  className={`p-2 border-b border-[#374151] last:border-b-0 cursor-pointer transition-colors ${
                                     selectedIds.has(result.place_id) 
                                       ? 'bg-[#3B82F6]/10' 
                                       : isDuplicate
@@ -1140,41 +1285,41 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                                   }`}
                                   onClick={() => !isDuplicate && toggleSelection(result.place_id)}
                                 >
-                                <div className="flex items-start gap-3">
-                                  <div className="flex-shrink-0 mt-1">
+                                <div className="flex items-start gap-2">
+                                  <div className="flex-shrink-0 mt-0.5">
                                     <input
                                       type="checkbox"
                                       checked={selectedIds.has(result.place_id)}
                                       onChange={() => {}}
                                       disabled={isDuplicate}
-                                      className="h-4 w-4 text-[#3B82F6] border-[#374151] rounded focus:ring-[#3B82F6] disabled:opacity-50 disabled:cursor-not-allowed"
+                                      className="h-3 w-3 text-[#3B82F6] border-[#374151] rounded focus:ring-[#3B82F6] disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                   </div>
                                   
                                   <div className="flex-grow">
                                     <div className="flex items-start justify-between">
                                       <div>
-                                        <div className="flex items-center gap-2">
-                                          <h5 className="font-medium text-white">{result.name}</h5>
+                                        <div className="flex items-center gap-1.5">
+                                          <h5 className="text-xs font-medium text-white">{result.name}</h5>
                                           {businessType === 'supplier' && (
-                                            <span className="text-xs bg-[#F59E0B]/20 text-[#F59E0B] px-2 py-0.5 rounded">
-                                              Supplier/Dealer
+                                            <span className="text-xs bg-[#F59E0B]/20 text-[#F59E0B] px-1.5 py-0.5 rounded">
+                                              Supplier
                                             </span>
                                           )}
                                           {businessType === 'contractor' && (
-                                            <span className="text-xs bg-[#10B981]/20 text-[#10B981] px-2 py-0.5 rounded">
+                                            <span className="text-xs bg-[#10B981]/20 text-[#10B981] px-1.5 py-0.5 rounded">
                                               Contractor
                                             </span>
                                           )}
                                           {isDuplicate && (
-                                            <span className="text-xs bg-[#EF4444]/20 text-[#EF4444] px-2 py-0.5 rounded">
+                                            <span className="text-xs bg-[#EF4444]/20 text-[#EF4444] px-1.5 py-0.5 rounded">
                                               Already imported
                                             </span>
                                           )}
                                         </div>
-                                        <p className="text-sm text-gray-400 mt-1">{result.formatted_address}</p>
+                                        <p className="text-xs text-gray-400 mt-0.5">{result.formatted_address}</p>
                                         
-                                        <div className="flex items-center gap-4 mt-2 text-sm">
+                                        <div className="flex items-center gap-3 mt-1 text-xs">
                                           {result.formatted_phone_number && (
                                             <span className="text-gray-300">📞 {result.formatted_phone_number}</span>
                                           )}
@@ -1185,11 +1330,11 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                                           )}
                                         </div>
                                         
-                                        <div className="flex flex-wrap gap-2 mt-2">
+                                        <div className="flex flex-wrap gap-1 mt-1">
                                           {result.quality_signals.map((signal, idx) => (
                                             <span
                                               key={idx}
-                                              className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-[#374151] text-gray-300"
+                                              className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-[#374151] text-gray-300"
                                             >
                                               {signal}
                                             </span>
@@ -1198,7 +1343,7 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                                         
                                         {/* Display enriched data if available */}
                                         {result.emails && result.emails.length > 0 && (
-                                          <p className="text-sm text-[#10B981] mt-1">✉️ {result.emails[0]}</p>
+                                          <p className="text-xs text-[#10B981] mt-0.5">✉️ {result.emails[0]}</p>
                                         )}
                                         {result.social_media && Object.values(result.social_media).some(arr => arr.length > 0) && (
                                           <div className="flex gap-2 mt-1">
@@ -1256,43 +1401,32 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                       )}
 
                       {/* Search Tips */}
-                      <div className="bg-[#374151]/50 rounded-lg p-4 space-y-2 mt-6">
-                        <h4 className="text-sm font-medium text-[#60A5FA]">💡 {searchMode === 'standard' ? 'Getting More Results:' : 'Apify Tips:'}</h4>
-                        <ul className="text-xs text-gray-300 space-y-1">
-                          {searchMode === 'standard' ? (
-                            <>
-                              <li>• Search different areas of the city (north, south, east, west)</li>
-                              <li>• Try variations: &quot;plumber&quot; vs &quot;plumbing&quot; vs &quot;emergency plumber&quot;</li>
-                              <li>• Use smaller radius (5-10km) and search multiple times</li>
-                              <li>• Search nearby cities for metro area coverage</li>
-                            </>
-                          ) : (
-                            <>
-                              <li>• Apify can find ALL businesses in an area, not just 60</li>
-                              <li>• Contact enrichment finds emails from business websites</li>
-                              <li>• Reviews help identify businesses needing reputation help</li>
-                              <li>• Leave filter unchecked to see ALL businesses (with and without websites)</li>
-                            </>
-                          )}
+                      <div className="bg-[#374151]/50 rounded p-2 space-y-1 mt-3">
+                        <h4 className="text-xs font-medium text-[#60A5FA]">💡 Apify Tips:</h4>
+                        <ul className="text-xs text-gray-300 space-y-0.5">
+                          <li>• Apify can find ALL businesses in an area, not just 60</li>
+                          <li>• Contact enrichment finds emails from business websites</li>
+                          <li>• Reviews help identify businesses needing reputation help</li>
+                          <li>• Leave filter unchecked to see ALL businesses (with and without websites)</li>
                         </ul>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-[#374151]/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                <div className="bg-[#374151]/50 px-3 py-2 sm:flex sm:flex-row-reverse sm:px-4">
                   <button
                     type="button"
                     onClick={handleImport}
                     disabled={selectedIds.size === 0}
-                    className="inline-flex w-full justify-center rounded-md bg-[#EAB308] px-3 py-2 text-sm font-semibold text-black shadow-sm hover:bg-[#D97706] sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex w-full justify-center rounded bg-[#EAB308] px-2.5 py-1.5 text-xs font-semibold text-black shadow-sm hover:bg-[#D97706] sm:ml-2 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Import {selectedIds.size} Selected
                   </button>
                   <button
                     type="button"
                     onClick={onClose}
-                    className="mt-3 inline-flex w-full justify-center rounded-md bg-[#1F2937] px-3 py-2 text-sm font-semibold text-gray-300 shadow-sm ring-1 ring-inset ring-[#374151] hover:bg-[#374151] sm:mt-0 sm:w-auto"
+                    className="mt-2 inline-flex w-full justify-center rounded bg-[#1F2937] px-2.5 py-1.5 text-xs font-semibold text-gray-300 shadow-sm ring-1 ring-inset ring-[#374151] hover:bg-[#374151] sm:mt-0 sm:w-auto"
                   >
                     Cancel
                   </button>

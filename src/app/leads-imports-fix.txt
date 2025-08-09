@@ -1,0 +1,27 @@
+// Add these imports after line 6:
+import { ChevronRightIcon } from '@heroicons/react/24/outline';
+import Sidebar from '@/components/Sidebar';
+
+// Add these imports after line 22:
+import ViewsSidebar from '@/components/ViewsSidebar';
+
+// Add these state variables after line 132 (after const [searchQuery, setSearchQuery] = useState('');):
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sidebarCollapsed') === 'true';
+    }
+    return false;
+  });
+  const [isViewsPanelOpen, setIsViewsPanelOpen] = useState(false);
+
+// Add this function after line 196 (after handleGoogleSheetsExport):
+  const handleToggleSidebar = () => {
+    const newValue = !isSidebarCollapsed;
+    setIsSidebarCollapsed(newValue);
+    localStorage.setItem('sidebarCollapsed', newValue.toString());
+  };
+
+// Fix the closing tag on line 718 - change from:
+    </div>
+// to:
+    </>

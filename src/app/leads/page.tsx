@@ -3,14 +3,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { useLeadStore } from '@/lib/store';
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { useLayout } from '@/contexts/LayoutContext';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import SimpleHeader from '@/components/SimpleHeader';
 import LeadTable from '@/components/LeadTable';
 import LeadGrid from '@/components/LeadGrid';
 import EnhancedFilters from '@/components/EnhancedFilters';
 import ViewToggle from '@/components/ViewToggle';
-import ViewDensityToggle from '@/components/ViewDensityToggle';
 import AddLeadModal from '@/components/modals/AddLeadModal';
 import BulkImportModal from '@/components/modals/BulkImportModal';
 import BulkEditModal from '@/components/modals/BulkEditModal';
@@ -20,16 +20,25 @@ import CloseCRMExportModal from '@/components/modals/CloseCRMExportModal';
 import GoogleSheetsSyncModal from '@/components/modals/GoogleSheetsSyncModal';
 import DuplicateDetectionModal from '@/components/modals/DuplicateDetectionModal';
 import CSVImportModal from '@/components/modals/CSVImportModal';
-import AdPlatformModal from '@/components/modals/AdPlatformModal';
 import GoogleMapsImportModal from '@/components/modals/GoogleMapsImportModal';
-import FacebookAdsSearchModal from '@/components/modals/FacebookAdsSearchModal';
-import { Menu, Transition } from '@headlessui/react';
-import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
-import { Fragment } from 'react';
+import GroupedColumnDropdown from '@/components/GroupedColumnDropdown';
+import LoadingScreen from '@/components/LoadingScreen';
+import DebugLeadSources from '@/components/DebugLeadSources';
+import UndoNotification from '@/components/UndoNotification';
 
-import { fetchLeads } from '@/lib/api';
+import { useLeadsQuery, useRefreshLeads } from '@/hooks/useLeadsQuery';
 import { exportToGoogleSheets, exportToCSV } from '@/utils/export';
 import { Lead } from '@/types';
+import { detectMetroArea } from '@/utils/metro-areas';
+import { normalizeState } from '@/utils/state-utils';
+import { getStateFromPhone } from '@/utils/area-codes';
+import { getCityFromPhone } from '@/utils/area-code-cities';
+import { getCategoryForService } from '@/utils/service-categories';
+import { initializeServiceTypeNormalization } from '@/utils/initialize-normalization';
+import { normalizeServiceType } from '@/utils/service-type-normalization';
+import { updateLeadsBatch } from '@/lib/api';
+import toast from 'react-hot-toast';
+import { MapPinIcon } from '@heroicons/react/24/outline';
 
 export default function LeadsPage() {
   const { 
@@ -40,41 +49,74 @@ export default function LeadsPage() {
     viewMode,
     sourceFilter,
     cityFilter,
-    serviceTypeFilter
+    serviceTypeFilter,
+    currentMarket,
+    updateLead
   } = useLeadStore();
   const { user, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   
-  // Sidebar collapse state
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sidebarCollapsed');
-      return saved === 'true';
-    }
-    return false;
-  });
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(100);
+  
+
   
   // Header collapse state
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const mainRef = useRef<HTMLDivElement>(null);
   
-  // Column visibility state
-  const [visibleColumns, setVisibleColumns] = useState({
+  // Column visibility state - default values
+  const defaultColumns = {
     handle: true,
     company: true,
     type: true,
+    searchQuery: true,
     city: true,
+    state: false,
     phone: true,
     email: true,
+    additionalEmails: false,
+    address: false,
     rating: true,
+    reviewCount: false,
+    score: true,
     links: true,
     source: true,
     ads: true,
-    adPlatforms: true,
-    notes: false, // Hide by default
-    close: false, // Hide by default
+    adPlatforms: false,
+    close: false,
     actions: true
-  });
+  };
+  
+  const [visibleColumns, setVisibleColumns] = useState(defaultColumns);
+  
+  // Load saved columns after mount to avoid hydration mismatch
+  useEffect(() => {
+    const saved = localStorage.getItem('leadTableColumns');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Filter out any columns that are no longer valid
+        const cleaned = Object.keys(defaultColumns).reduce((acc, key) => {
+          const typedKey = key as keyof typeof defaultColumns;
+          acc[typedKey] = parsed[typedKey] !== undefined ? parsed[typedKey] : defaultColumns[typedKey];
+          return acc;
+        }, {} as typeof defaultColumns);
+        setVisibleColumns(cleaned);
+      } catch (e) {
+        console.error('Failed to parse saved columns:', e);
+      }
+    }
+  }, []); // Run once on mount
+  
+  // Save column preferences when they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('leadTableColumns', JSON.stringify(visibleColumns));
+    }
+  }, [visibleColumns]);
   
   // Modal states
   const [showAddLead, setShowAddLead] = useState(false);
@@ -86,133 +128,41 @@ export default function LeadsPage() {
   const [showGoogleSheetsSync, setShowGoogleSheetsSync] = useState(false);
   const [showDuplicateDetection, setShowDuplicateDetection] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
-  const [showAdPlatformCheck, setShowAdPlatformCheck] = useState(false);
   const [showGoogleMapsImport, setShowGoogleMapsImport] = useState(false);
-  const [showFacebookAdsSearch, setShowFacebookAdsSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Get sidebar state from context
+  const { isSidebarCollapsed, setIsSidebarCollapsed, isViewsPanelOpen } = useLayout();
 
-  const loadLeads = async () => {
-    try {
-      const fetchedLeads = await fetchLeads();
-      
-      // Add hardcoded multi-source example at the top
-      const multiSourceExample: Lead = {
-        id: 'example-multi-source',
-        user_id: user?.id || '',
-        company_name: 'Phoenix Premium Plumbing',
-        handle: '@phoenixpremiumplumbing',
-        service_type: 'Plumbing',
-        city: 'Phoenix',
-        state: 'AZ',
-        phone: '(602) 555-0123',
-        email: 'info@phoenixpremiumplumbing.com',
-        website: 'https://phoenixpremiumplumbing.com',
-        instagram_url: 'https://instagram.com/phoenixpremiumplumbing',
-        google_maps_url: 'https://www.google.com/maps/place/?q=place_id:ChIJexample123',
-        address: '1234 E Camelback Rd, Phoenix, AZ 85014',
-        rating: 4.8,
-        review_count: 127,
-        lead_source: 'Google Maps',
-        running_ads: true,
-        ad_start_date: '2024-01-15',
-        ad_copy: '🚰 Emergency Plumbing Services Available 24/7! Licensed & Insured. Same-day service for all your plumbing needs.', // Legacy single ad copy
-        ad_call_to_action: 'Get Quote',
-        ad_platform: 'Facebook',
-        ad_platforms: [
-          {
-            platform: 'Facebook Ads',
-            hasAds: true,
-            lastChecked: new Date().toISOString(),
-            adCount: 3,
-            notes: 'Running multiple campaigns targeting Phoenix metro area',
-            ads: [
-              {
-                id: 'fb-ad-1',
-                type: 'image',
-                headline: '24/7 Emergency Plumbing Services',
-                primaryText: '🚰 Burst pipe? Clogged drain? We\'re here 24/7! Licensed & insured plumbers ready to help. Same-day service available.',
-                description: 'Phoenix\'s most trusted emergency plumbing service',
-                callToAction: 'Get Quote',
-                status: 'active',
-                imageUrl: '/api/placeholder/400/300',
-                lastSeen: new Date().toISOString(),
-                targeting: {
-                  locations: ['Phoenix, AZ', 'Scottsdale, AZ', 'Mesa, AZ'],
-                  ageRange: '25-65+',
-                }
-              },
-              {
-                id: 'fb-ad-2',
-                type: 'video',
-                headline: 'Save 20% on Drain Cleaning',
-                primaryText: '🎯 Special Offer: Professional drain cleaning starting at $89 (reg $109). Fast, reliable service by certified plumbers.',
-                callToAction: 'Book Now',
-                status: 'active',
-                videoUrl: '/api/placeholder/video',
-                thumbnailUrl: '/api/placeholder/400/300',
-                lastSeen: new Date().toISOString(),
-                spend: '$1,250',
-              },
-              {
-                id: 'fb-ad-3',
-                type: 'carousel',
-                headline: 'Complete Plumbing Services',
-                primaryText: 'From repairs to remodels - we do it all! ✅ Water heaters ✅ Pipe repair ✅ Bathroom remodels ✅ Kitchen plumbing',
-                callToAction: 'Learn More',
-                status: 'active',
-                lastSeen: new Date(Date.now() - 86400000).toISOString(), // Yesterday
-              }
-            ]
-          },
-          {
-            platform: 'Google Ads',
-            hasAds: true,
-            lastChecked: new Date().toISOString(),
-            adCount: 2,
-            notes: 'Running search ads for emergency plumbing keywords',
-            ads: [
-              {
-                id: 'google-ad-1',
-                type: 'text',
-                headline: 'Emergency Plumber Phoenix - Available 24/7',
-                description: 'Licensed plumbers ready now. Fast response, fair prices. Call for same-day service.',
-                callToAction: 'Call Now',
-                status: 'active',
-                lastSeen: new Date().toISOString(),
-              },
-              {
-                id: 'google-ad-2',
-                type: 'text',
-                headline: 'Phoenix Plumbing Repair - $50 Off First Service',
-                description: 'Professional plumbing repairs. Water heaters, pipes, drains & more. Licensed & insured.',
-                callToAction: 'Get $50 Off',
-                status: 'active',
-                spend: '$2,800/month',
-                lastSeen: new Date().toISOString(),
-              }
-            ]
-          }
-        ],
-        total_ad_platforms: 2,
-        notes: '🔗 Multi-source lead: Found in both Google Maps and FB Ad Library\n\nHigh-value lead! Established business with strong online presence and active marketing campaigns. Google Maps shows 127 reviews with 4.8 rating. Running Facebook ads for emergency services. Total of 5 active ads across Facebook and Google.',
-        score: 'A+',
-        dm_sent: false,
-        called: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      
-      // Add example at the beginning of the array
-      setLeads([multiSourceExample, ...fetchedLeads]);
-    } catch (error) {
-      console.error('Failed to fetch leads:', error);
-    }
-  };
-
+  // Handle URL parameters to auto-open modals
   useEffect(() => {
-    if (user) {
-      loadLeads();
+    if (searchParams) {
+      const openGoogleMaps = searchParams.get('openGoogleMaps') === 'true';
+      const openBulkImport = searchParams.get('openBulkImport') === 'true';
+      const openInstagramHelper = searchParams.get('openInstagramHelper') === 'true';
+      
+      if (openGoogleMaps) {
+        setShowGoogleMapsImport(true);
+      } else if (openBulkImport) {
+        setShowBulkImport(true);
+      } else if (openInstagramHelper) {
+        // For now, just open add lead modal
+        setShowAddLead(true);
+      }
+      
+      // Clear the URL parameters after opening the modal
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
     }
-  }, [user]);
+  }, [searchParams]);
+
+  // Use React Query to fetch leads with caching
+  const { isLoading: isLoadingLeads, error: loadError } = useLeadsQuery();
+  const refreshLeads = useRefreshLeads();
+  
+  // Update total count when leads change
+  const totalLeadCount = leads.length;
+      
 
   // Handle scroll to collapse header
   useEffect(() => {
@@ -230,30 +180,16 @@ export default function LeadsPage() {
     handleScroll();
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+  
 
-  // Auto-refresh when tab becomes visible
+  // React Query handles auto-refresh, so we don't need this anymore
+  
+  // Redirect to login if not authenticated
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && user) {
-        loadLeads();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    const handleFocus = () => {
-      if (user) {
-        loadLeads();
-      }
-    };
-    
-    window.addEventListener('focus', handleFocus);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [user]);
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
 
   const handleGoogleSheetsExport = async () => {
     if (selectedLeads.length === 0) {
@@ -262,50 +198,210 @@ export default function LeadsPage() {
     }
     setShowGoogleSheetsExport(true);
   };
-
+  
   const handleToggleSidebar = () => {
-    const newValue = !isSidebarCollapsed;
-    setIsSidebarCollapsed(newValue);
-    localStorage.setItem('sidebarCollapsed', newValue.toString());
+    setIsSidebarCollapsed(!isSidebarCollapsed);
   };
 
-  // Redirect to login if not authenticated
+  // Debug state detection issue
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
+    const csvLeads = leads.filter(lead => lead.lead_source === 'CSV Import');
+    if (csvLeads.length > 0) {
+      // Check how many CSV leads have actual state values
+      const csvLeadsWithState = csvLeads.filter(lead => lead.state);
+      const csvLeadsWithoutState = csvLeads.filter(lead => !lead.state);
+      
+      console.log('CSV Import analysis:');
+      console.log(`Total CSV leads: ${csvLeads.length}`);
+      console.log(`CSV leads WITH state field: ${csvLeadsWithState.length}`);
+      console.log(`CSV leads WITHOUT state field: ${csvLeadsWithoutState.length}`);
+      
+      // Check unique states in CSV data
+      const csvStates = csvLeadsWithState.map(lead => lead.state);
+      const uniqueCSVStates = Array.from(new Set(csvStates));
+      console.log('Unique states in CSV data:', uniqueCSVStates);
+      
+      // Sample some leads without state to see if phone detection is being used
+      if (csvLeadsWithoutState.length > 0) {
+        console.log('Sample CSV leads without state:', csvLeadsWithoutState.slice(0, 3).map(lead => ({
+          company: lead.company_name,
+          city: lead.city,
+          state: lead.state,
+          phone: lead.phone
+        })));
+      }
     }
-  }, [user, loading, router]);
+  }, [leads]);
 
+  // Filter leads based on all active filters and current market
+  const filteredLeads = leads.filter((lead) => {
+    // Dynamic market filter
+    if (currentMarket && currentMarket.id !== 'all') {
+      if (currentMarket.id === 'unassigned') {
+        // Show only leads that can't be assigned to any market
+        // Check if we can detect state or city from any method
+        let detectedState = normalizeState(lead.state);
+        let detectedCity = lead.city || '';
+        
+        // Extract city from company name if not already set
+        if (!detectedCity && lead.company_name) {
+          // Common patterns: "Company - City" or "Company in City"
+          const dashMatch = lead.company_name.match(/\s*-\s*([A-Za-z\s]+?)$/);
+          const inMatch = lead.company_name.match(/\sin\s+([A-Za-z\s]+?)$/i);
+          const potentialCity = dashMatch?.[1] || inMatch?.[1];
+          
+          if (potentialCity) {
+            const trimmedCity = potentialCity.trim();
+            // Check if this is a known city
+            const detectedMetro = detectMetroArea(trimmedCity, '');
+            if (detectedMetro) {
+              detectedCity = trimmedCity;
+              if (!detectedState) {
+                detectedState = detectedMetro.state;
+              }
+            }
+          }
+        }
+        
+        if (!detectedState && detectedCity) {
+          const detectedMetro = detectMetroArea(detectedCity, '');
+          if (detectedMetro) detectedState = detectedMetro.state;
+        }
+        
+        if (lead.phone) {
+          if (!detectedState) {
+            detectedState = getStateFromPhone(lead.phone) || '';
+          }
+          if (!detectedCity) {
+            detectedCity = getCityFromPhone(lead.phone) || '';
+          }
+        }
+        
+        // Only show in unassigned if we can't detect any location by any method
+        return !detectedCity && !detectedState;
+      } else if (currentMarket.id.startsWith('category-')) {
+        // Category filter
+        const categoryId = currentMarket.id.replace('category-', '');
+        const normalizedType = lead.service_type ? normalizeServiceType(lead.service_type) : null;
+        const category = normalizedType ? getCategoryForService(normalizedType) : null;
+        return category?.id === categoryId;
+      } else if (currentMarket.id.startsWith('service-')) {
+        // Specific service type filter
+        const serviceType = currentMarket.id.replace('service-', '');
+        const normalizedLeadType = lead.service_type ? normalizeServiceType(lead.service_type) : null;
+        return normalizedLeadType === serviceType;
+      } else if (currentMarket.id.startsWith('query-')) {
+        // Search query filter
+        const searchQueryValue = currentMarket.id.replace('query-', '');
+        return lead.search_query === searchQueryValue;
+      } else if (currentMarket.type === 'state') {
+        // Check if lead belongs to this state
+        let leadState = normalizeState(lead.state);
+        
+        // Try multiple methods to determine state
+        if (!leadState && lead.city) {
+          // Try to detect from city
+          const detectedMetro = detectMetroArea(lead.city, '');
+          if (detectedMetro) {
+            leadState = detectedMetro.state;
+          }
+        }
+        
+        if (!leadState && lead.phone) {
+          // Try to detect from phone area code
+          leadState = getStateFromPhone(lead.phone) || '';
+        }
+        
+        return leadState === currentMarket.state;
+      } else if (currentMarket.type === 'metro' || currentMarket.type === 'city') {
+        // Check if lead's city is in this market
+        let leadCity = lead.city || '';
+        
+        // If no city but has phone, try to detect city
+        if (!leadCity && lead.phone) {
+          leadCity = getCityFromPhone(lead.phone) || '';
+        }
+        
+        if (currentMarket.cities.includes(leadCity)) {
+          // If lead has state, it must match
+          const leadState = normalizeState(lead.state);
+          if (leadState && leadState !== currentMarket.state) return false;
+          return true;
+        }
+        return false;
+      }
+    }
+    
+    // Source filter
+    const hasSource = lead.lead_source && lead.lead_source !== null;
+    
+    // Check if all sources are selected
+    const allSourcesSelected = sourceFilter.instagram && sourceFilter.adLibrary && sourceFilter.googleMaps && sourceFilter.csvImport;
+    
+    // If all sources are selected, show everything
+    if (allSourcesSelected) {
+      // Continue to other filters
+    } else {
+      // If not all sources are selected, apply source filtering
+      if (!hasSource) {
+        // If lead has no source, don't show it unless all filters are on
+        return false;
+      }
+      
+      // Filter by specific source
+      if (lead.lead_source === 'Instagram Manual' && !sourceFilter.instagram) return false;
+      if (lead.lead_source === 'FB Ad Library' && !sourceFilter.adLibrary) return false;
+      if (lead.lead_source === 'Google Maps' && !sourceFilter.googleMaps) return false;
+      if (lead.lead_source === 'CSV Import' && !sourceFilter.csvImport) return false;
+      
+      // If lead has an unknown source, hide it
+      const knownSources = ['Instagram Manual', 'FB Ad Library', 'Google Maps', 'CSV Import'];
+      if (!lead.lead_source || !knownSources.includes(lead.lead_source)) return false;
+    }
+    
+    // City filter
+    if (cityFilter && cityFilter !== 'all' && lead.city !== cityFilter) return false;
+    
+    // Service type filter
+    if (serviceTypeFilter && serviceTypeFilter !== 'all' && lead.service_type !== serviceTypeFilter) return false;
+    
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      const matchesSearch = 
+        lead.company_name?.toLowerCase().includes(query) ||
+        lead.handle?.toLowerCase().includes(query) ||
+        lead.city?.toLowerCase().includes(query) ||
+        lead.service_type?.toLowerCase().includes(query) ||
+        lead.email?.toLowerCase().includes(query) ||
+        lead.phone?.includes(query) ||
+        lead.notes?.toLowerCase().includes(query);
+      
+      if (!matchesSearch) return false;
+    }
+    
+    return true;
+  });
+  
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredLeads.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, filteredLeads.length);
+  const displayedLeads = filteredLeads.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [sourceFilter, cityFilter, serviceTypeFilter, searchQuery, currentMarket]);
+
+  // Conditional returns MUST come after all hooks
   if (loading) {
-    return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!user) {
     return null;
   }
-
-  // Filter leads based on all active filters
-  const filteredLeads = leads.filter((lead) => {
-    // Source filter
-    if (lead.lead_source === 'Instagram Manual' && !sourceFilter.instagram) return false;
-    if (lead.lead_source === 'FB Ad Library' && !sourceFilter.adLibrary) return false;
-    if (lead.lead_source === 'Google Maps' && !sourceFilter.googleMaps) return false;
-    
-    // City filter
-    if (cityFilter !== 'all' && lead.city !== cityFilter) return false;
-    
-    // Service type filter
-    if (serviceTypeFilter !== 'all' && lead.service_type !== serviceTypeFilter) return false;
-    
-    return true;
-  });
 
   return (
     <>
@@ -316,135 +412,253 @@ export default function LeadsPage() {
         onAnalytics={() => {}}
         onSettings={() => setShowSettings(true)}
         onBulkEdit={() => setShowBulkEdit(true)}
-        onAdPlatformCheck={() => setShowAdPlatformCheck(true)}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={handleToggleSidebar}
       />
       
-      <div className={`transition-all duration-300 min-h-screen bg-white dark:bg-gray-900 ${
-        isSidebarCollapsed ? 'lg:pl-16' : 'lg:pl-56'
+      <div className={`flex-1 min-h-screen bg-white dark:bg-gray-900 ${
+        isSidebarCollapsed 
+          ? isViewsPanelOpen ? 'lg:pl-[384px]' : 'lg:pl-16'
+          : isViewsPanelOpen ? 'lg:pl-[544px]' : 'lg:pl-56'
       }`}>
+        
         {/* Fixed header positioned at the top level */}
-        <div className={`fixed top-0 right-0 transition-all duration-300 ease-in-out z-40 ${
+        <div className={`fixed top-0 right-0 z-20 ${
           isHeaderCollapsed 
             ? 'bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700' 
             : 'bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800'
-        } ${isSidebarCollapsed ? 'lg:left-16 left-0' : 'lg:left-56 left-0'}`}>
-            <div className="px-2 sm:px-3 lg:px-4">
-              {/* Always-present header wrapper with smooth height transition */}
-              <div className={`transition-all duration-300 ease-in-out ${
-                isHeaderCollapsed ? 'py-1' : 'py-1.5'
-              }`}>
-                {/* Cleaner single-row layout */}
-                <div className={`transition-all duration-300 ease-in-out ${
-                  isHeaderCollapsed 
-                    ? 'scale-y-0 opacity-0 max-h-0 pointer-events-none' 
-                    : 'scale-y-100 opacity-100'
-                }`}>
-                  <SimpleHeader
-                    onBulkImport={() => setShowBulkImport(true)}
-                    onCSVImport={() => setShowCSVImport(true)}
-                    onGoogleMapsImport={() => setShowGoogleMapsImport(true)}
-                    onFacebookAdsSearch={() => setShowFacebookAdsSearch(true)}
-                    onGoogleSheetsExport={handleGoogleSheetsExport}
-                    onCSVExport={() => exportToCSV(leads)}
-                    onCloseCRMExport={() => setShowCloseCRMExport(true)}
+        }`} style={{
+          left: `${isSidebarCollapsed ? (isViewsPanelOpen ? '384px' : '64px') : (isViewsPanelOpen ? '544px' : '224px')}`
+        }}>
+        <div className="px-4 sm:px-6 lg:px-8">
+          {/* Always-present header wrapper */}
+          <div className={`${
+            isHeaderCollapsed ? 'py-1' : 'py-1.5'
+          }`}>
+            {/* Cleaner single-row layout */}
+            <div className={`relative z-[100] ${
+              isHeaderCollapsed 
+                ? 'scale-y-0 opacity-0 max-h-0 pointer-events-none' 
+                : 'scale-y-100 opacity-100'
+            }`}>
+              <SimpleHeader
+                onBulkImport={() => setShowBulkImport(true)}
+                onCSVImport={() => setShowCSVImport(true)}
+                onGoogleMapsImport={() => setShowGoogleMapsImport(true)}
+                onGoogleSheetsExport={handleGoogleSheetsExport}
+                onCSVExport={() => exportToCSV(leads)}
+                onCloseCRMExport={() => setShowCloseCRMExport(true)}
+                totalCount={totalLeadCount}
+              />
+            </div>
+            
+            {/* Filters and controls bar */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-3 relative z-[50]">
+              {/* Left side: Collapsed header indicator + Filters */}
+              <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                {/* Lead count - only visible when collapsed */}
+                {isHeaderCollapsed && (
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">Leads</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">{filteredLeads.length}</span>
+                  </div>
+                )}
+                
+                {/* Filters */}
+                <div className="flex-1">
+                  <EnhancedFilters 
+                    compact={isHeaderCollapsed}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
                   />
                 </div>
+              </div>
+              
+              {/* Right side: View controls */}
+              <div className="flex items-center gap-2 ml-auto">
+                {/* Column visibility dropdown */}
+                <GroupedColumnDropdown 
+                  visibleColumns={visibleColumns as Record<string, boolean>}
+                  setVisibleColumns={setVisibleColumns as React.Dispatch<React.SetStateAction<Record<string, boolean>>>}
+                  isCompact={isHeaderCollapsed}
+                />
                 
-                {/* Filters and controls bar */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-2">
-                  {/* Left side: Collapsed header indicator + Filters */}
-                  <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
-                    {/* Lead count - only visible when collapsed */}
-                    <div className={`flex items-center gap-2 transition-all duration-300 ${
-                      isHeaderCollapsed ? 'opacity-100' : 'opacity-0 w-0 overflow-hidden'
-                    }`}>
-                      <span className="text-[10px] text-gray-400">▼</span>
-                      <div className="flex items-center gap-1 text-sm flex-shrink-0">
-                        <span className="font-semibold text-gray-800">{filteredLeads.length}</span>
-                        <span className="text-gray-400 text-xs">/</span>
-                        <span className="text-gray-500 text-xs">{leads.length}</span>
-                      </div>
-                    </div>
-                    
-                    {/* Filters */}
-                    <EnhancedFilters compact={isHeaderCollapsed} />
-                  </div>
-                  
-                  {/* Right side: View controls */}
-                  <div className="flex items-center gap-2 ml-auto">
-                      {/* Column visibility dropdown */}
-                      <Menu as="div" className="relative inline-block text-left">
-                      <div>
-                        <Menu.Button className={`inline-flex items-center border border-gray-200 font-medium rounded text-gray-600 bg-white hover:bg-gray-50 hover:text-gray-900 focus:outline-none transition-all duration-300 ${
-                          isHeaderCollapsed ? 'px-1.5 py-0.5 text-xs' : 'px-2 py-1 text-xs'
-                        }`}>
-                          <EyeIcon className="h-3.5 w-3.5" />
-                          {!isHeaderCollapsed && <span className="ml-1">Columns</span>}
-                        </Menu.Button>
-                      </div>
-                      <Transition
-                        as={Fragment}
-                        enter="transition ease-out duration-100"
-                        enterFrom="transform opacity-0 scale-95"
-                        enterTo="transform opacity-100 scale-100"
-                        leave="transition ease-in duration-75"
-                        leaveFrom="transform opacity-100 scale-100"
-                        leaveTo="transform opacity-0 scale-95"
-                      >
-                        <Menu.Items className="absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 focus:outline-none z-[45]">
-                          <div className="py-1">
-                            {(Object.entries(visibleColumns) as [keyof typeof visibleColumns, boolean][]).map(([column, visible]) => (
-                              <Menu.Item key={column}>
-                                {({ active }) => (
-                                  <button
-                                    onClick={() => setVisibleColumns(prev => ({ ...prev, [column]: !prev[column as keyof typeof visibleColumns] }))}
-                                    className={`${
-                                      active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
-                                    } group flex items-center justify-between px-4 py-2 text-sm w-full`}
-                                  >
-                                    <span className="capitalize">{column.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                    {visible ? (
-                                      <EyeIcon className="h-4 w-4 text-gray-400" />
-                                    ) : (
-                                      <EyeSlashIcon className="h-4 w-4 text-gray-400" />
-                                    )}
-                                  </button>
-                                )}
-                              </Menu.Item>
-                            ))}
-                          </div>
-                        </Menu.Items>
-                      </Transition>
-                    </Menu>
-                    
-                    {/* View density toggle - always present, just changes compact mode */}
-                    <ViewDensityToggle compact={isHeaderCollapsed} />
-                    
-                    {/* View toggle - always present, just changes compact mode */}
-                    <ViewToggle compact={isHeaderCollapsed} />
-                  </div>
-                </div>
+                {/* View toggle - always present, just changes compact mode */}
+                <ViewToggle compact={isHeaderCollapsed} />
               </div>
             </div>
+          </div>
         </div>
-        
-        {/* Main content area */}
-        <main className={`bg-gray-50 dark:bg-gray-900 min-h-screen transition-all duration-300 ${
-          isHeaderCollapsed ? 'pt-12' : 'pt-20'
-        }`} ref={mainRef}>
-          <div className="pt-2 relative z-10">
-            {/* Conditional rendering based on view mode */}
-            {viewMode === 'table' ? (
-              <LeadTable 
-                visibleColumns={visibleColumns} 
-                setVisibleColumns={setVisibleColumns}
-                isHeaderCollapsed={isHeaderCollapsed}
-              />
-            ) : (
-              <LeadGrid />
+      </div>
+      
+      {/* Main content area */}
+      <main className={`bg-gray-50 dark:bg-gray-900 min-h-screen ${
+        isHeaderCollapsed ? 'pt-12' : 'pt-20'
+      }`} ref={mainRef}>
+        <div className="pt-2 relative z-10">
+          {/* Show loading indicator when fetching leads */}
+          {isLoadingLeads && leads.length === 0 && (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600 dark:text-gray-400">Loading all leads from database...</p>
+                <p className="text-sm text-gray-500 mt-2">This may take a few seconds for large datasets</p>
+              </div>
+            </div>
             )}
+            
+            {/* Show error if loading fails */}
+            {loadError && (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <p className="text-red-600 mb-4">Failed to load leads</p>
+                  <button 
+                    onClick={() => refreshLeads()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Conditional rendering based on view mode */}
+            {!isLoadingLeads || leads.length > 0 ? (
+              <>
+                {viewMode === 'table' ? (
+                  <div className={totalPages > 1 ? 'pb-16' : ''}>
+                    <LeadTable 
+                      visibleColumns={visibleColumns} 
+                      setVisibleColumns={setVisibleColumns}
+                      isHeaderCollapsed={isHeaderCollapsed}
+                      filteredLeads={displayedLeads}
+                      startIndex={startIndex}
+                    />
+                    {totalPages > 1 && (
+                      <div className="fixed bottom-0 left-0 right-0 flex flex-col sm:flex-row items-center justify-between gap-4 py-3 px-4 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-20" style={{
+                        marginLeft: `${isSidebarCollapsed ? (isViewsPanelOpen ? 384 : 64) : (isViewsPanelOpen ? 544 : 224)}px`
+                      }}>
+                        {/* Lead count info */}
+                        <div className="text-sm text-gray-700 dark:text-gray-300">
+                          Showing {startIndex + 1}-{endIndex} of {filteredLeads.length} leads
+                        </div>
+
+                        {/* Pagination controls */}
+                        <div className="flex items-center gap-1">
+                          {/* Previous button */}
+                          <button
+                            onClick={() => setCurrentPage(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="px-2 py-1 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            ←
+                          </button>
+
+                          {/* Page numbers */}
+                          {(() => {
+                            const pages = [];
+                            const maxVisible = 7; // Maximum number of page buttons to show
+                            
+                            if (totalPages <= maxVisible) {
+                              // Show all pages if total is less than max
+                              for (let i = 1; i <= totalPages; i++) {
+                                pages.push(i);
+                              }
+                            } else {
+                              // Always show first page
+                              pages.push(1);
+                              
+                              // Calculate range around current page
+                              let start = Math.max(2, currentPage - 2);
+                              let end = Math.min(totalPages - 1, currentPage + 2);
+                              
+                              // Adjust range if at the beginning
+                              if (currentPage <= 3) {
+                                end = 5;
+                              }
+                              
+                              // Adjust range if at the end
+                              if (currentPage >= totalPages - 2) {
+                                start = totalPages - 4;
+                              }
+                              
+                              // Add ellipsis if needed
+                              if (start > 2) {
+                                pages.push('...');
+                              }
+                              
+                              // Add pages in range
+                              for (let i = start; i <= end; i++) {
+                                pages.push(i);
+                              }
+                              
+                              // Add ellipsis if needed
+                              if (end < totalPages - 1) {
+                                pages.push('...');
+                              }
+                              
+                              // Always show last page
+                              pages.push(totalPages);
+                            }
+                            
+                            return pages.map((page, index) => (
+                              page === '...' ? (
+                                <span key={`ellipsis-${index}`} className="px-2 text-gray-500 dark:text-gray-400">
+                                  ...
+                                </span>
+                              ) : (
+                                <button
+                                  key={page}
+                                  onClick={() => setCurrentPage(page as number)}
+                                  className={`px-2.5 py-1 text-sm font-medium rounded-md ${
+                                    currentPage === page
+                                      ? 'bg-blue-600 text-white'
+                                      : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                  }`}
+                                >
+                                  {page}
+                                </button>
+                              )
+                            ));
+                          })()}
+
+                          {/* Next button */}
+                          <button
+                            onClick={() => setCurrentPage(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="px-2 py-1 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            →
+                          </button>
+                        </div>
+
+                        {/* Items per page selector */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-700 dark:text-gray-300">Per page:</span>
+                          <select
+                            value={itemsPerPage}
+                            onChange={(e) => {
+                              setItemsPerPage(Number(e.target.value));
+                              setCurrentPage(1); // Reset to first page when changing items per page
+                            }}
+                            className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200"
+                          >
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                            <option value={200}>200</option>
+                            <option value={400}>400</option>
+                            <option value={500}>500</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <LeadGrid />
+                )}
+                
+              </>
+            ) : null}
           </div>
         </main>
       </div>
@@ -472,19 +686,13 @@ export default function LeadsPage() {
       <GoogleSheetsSyncModal open={showGoogleSheetsSync} onClose={() => setShowGoogleSheetsSync(false)} />
       <DuplicateDetectionModal open={showDuplicateDetection} onClose={() => setShowDuplicateDetection(false)} />
       <CSVImportModal open={showCSVImport} onClose={() => setShowCSVImport(false)} />
-      <AdPlatformModal 
-        open={showAdPlatformCheck} 
-        onClose={() => setShowAdPlatformCheck(false)} 
-        selectedLeadIds={selectedLeads}
-      />
       <GoogleMapsImportModal 
         open={showGoogleMapsImport} 
         onClose={() => setShowGoogleMapsImport(false)} 
       />
-      <FacebookAdsSearchModal
-        open={showFacebookAdsSearch}
-        onClose={() => setShowFacebookAdsSearch(false)}
-      />
+      
+      {/* Undo notification */}
+      <UndoNotification />
     </>
   );
 }

@@ -1,13 +1,13 @@
 import { Lead } from '@/types';
-import { CheckIcon, TrashIcon, PencilSquareIcon, GlobeAltIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, TrashIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import EditLeadModal from './modals/EditLeadModal';
-import AdPlatformModal from './modals/AdPlatformModal';
 import AdViewerModal from './modals/AdViewerModal';
 import { deleteLead as deleteLeadAPI } from '@/lib/api';
 import { useLeadStore } from '@/lib/store';
 import toast from 'react-hot-toast';
 import { ensureProtocol } from '@/utils/csv-parser';
+import { normalizeServiceType } from '@/utils/service-type-normalization';
 
 export default function LeadGrid() {
   const { 
@@ -21,8 +21,6 @@ export default function LeadGrid() {
   } = useLeadStore();
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showAdPlatformModal, setShowAdPlatformModal] = useState(false);
-  const [adPlatformLeadId, setAdPlatformLeadId] = useState<string | null>(null);
   const [showAdViewerModal, setShowAdViewerModal] = useState(false);
   const [adViewerLead, setAdViewerLead] = useState<Lead | null>(null);
 
@@ -46,7 +44,10 @@ export default function LeadGrid() {
     if (cityFilter !== 'all' && lead.city !== cityFilter) return false;
     
     // Service type filter
-    if (serviceTypeFilter !== 'all' && lead.service_type !== serviceTypeFilter) return false;
+    if (serviceTypeFilter !== 'all') {
+      const normalizedType = lead.service_type ? normalizeServiceType(lead.service_type) : null;
+      if (normalizedType !== serviceTypeFilter) return false;
+    }
     
     return true;
   });
@@ -101,17 +102,6 @@ export default function LeadGrid() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setAdPlatformLeadId(lead.id);
-                    setShowAdPlatformModal(true);
-                  }}
-                  className="text-blue-600 hover:text-blue-900"
-                  title="Check ad platforms"
-                >
-                  <GlobeAltIcon className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
                     handleDeleteLead(lead.id);
                   }}
                   className="text-red-600 hover:text-red-900"
@@ -130,7 +120,7 @@ export default function LeadGrid() {
 
             {/* Service type and location */}
             <div className="space-y-1 mb-4">
-              <p className="text-sm text-gray-600">{lead.service_type}</p>
+              <p className="text-sm text-gray-600">{lead.normalized_service_type || lead.service_type}</p>
               <p className="text-sm text-gray-500">{lead.city}{lead.state ? `, ${lead.state}` : ''}</p>
             </div>
 
@@ -224,15 +214,6 @@ export default function LeadGrid() {
           setEditingLead(null);
         }} 
         lead={editingLead} 
-      />
-      
-      <AdPlatformModal
-        open={showAdPlatformModal}
-        onClose={() => {
-          setShowAdPlatformModal(false);
-          setAdPlatformLeadId(null);
-        }}
-        selectedLeadIds={adPlatformLeadId ? [adPlatformLeadId] : []}
       />
       
       <AdViewerModal
