@@ -553,14 +553,16 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
   };
   
   const handleUndo = async () => {
-    const { undoLastImport } = useLeadStore.getState();
-    const result = await undoLastImport();
-    
-    if (result.success) {
-      toast.success(`Undone! Removed ${result.deletedCount} leads.`);
-    } else {
-      toast.error('Failed to undo import');
-    }
+    // TODO: Implement undo functionality
+    // const { undoLastImport } = useLeadStore.getState();
+    // const result = await undoLastImport();
+    // 
+    // if (result.success) {
+    //   toast.success(`Undone! Removed ${result.deletedCount} leads.`);
+    // } else {
+    //   toast.error('Failed to undo import');
+    // }
+    toast.error('Undo functionality not yet implemented');
   };
 
   const handleResetAllImports = async () => {
@@ -731,7 +733,6 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                               onChange={setCity}
                               placeholder="e.g., Phoenix, AZ"
                               className="w-full rounded bg-[#1F2937] border-[#374151] text-white text-xs"
-                              disabled={isImportingApify}
                             />
                             <p className="text-xs text-gray-500 mt-0.5">
                               Enter the city and state

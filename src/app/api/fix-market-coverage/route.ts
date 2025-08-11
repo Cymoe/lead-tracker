@@ -4,7 +4,7 @@ import { extractServiceTypeFromQuery } from '@/utils/extract-service-type';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -69,7 +69,8 @@ export async function POST(request: NextRequest) {
 
     // Update market coverage for each market
     const updates = [];
-    for (const [marketId, data] of marketData) {
+    const marketEntries = Array.from(marketData);
+    for (const [marketId, data] of marketEntries) {
       const marketParts = marketId.split('-');
       const city = marketParts[1];
       const state = marketParts[2];

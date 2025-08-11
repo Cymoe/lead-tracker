@@ -4,7 +4,7 @@ import { normalizeServiceType } from '@/utils/service-type-normalization';
 
 export async function POST() {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser();
@@ -111,7 +111,7 @@ export async function POST() {
 // GET endpoint to check normalization stats
 export async function GET() {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // Check authentication
     const { data: { user } } = await supabase.auth.getUser();

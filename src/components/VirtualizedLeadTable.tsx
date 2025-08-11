@@ -30,6 +30,7 @@ interface VirtualizedLeadTableProps {
     handle: boolean;
     company: boolean;
     type: boolean;
+    searchQuery: boolean;
     city: boolean;
     state: boolean;
     phone: boolean;
@@ -50,6 +51,7 @@ interface VirtualizedLeadTableProps {
     handle: boolean;
     company: boolean;
     type: boolean;
+    searchQuery: boolean;
     city: boolean;
     state: boolean;
     phone: boolean;
@@ -99,6 +101,7 @@ export default function VirtualizedLeadTable({ visibleColumns, setVisibleColumns
     handle: false,
     company: true,
     type: true,
+    searchQuery: false,
     city: true,
     state: false,
     phone: true,

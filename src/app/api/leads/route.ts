@@ -4,7 +4,7 @@ import { dbToAppLead } from '@/lib/supabase-api';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // Get user
     const { data: { user } } = await supabase.auth.getUser();

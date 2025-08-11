@@ -1,5 +1,5 @@
 import { createClient } from './supabase/client';
-import { MarketCoverage } from '@/types';
+import { MarketCoverage, ImportMetric } from '@/types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getMarketSizeConfig } from '@/utils/market-size';
 

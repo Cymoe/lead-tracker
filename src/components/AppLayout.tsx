@@ -15,16 +15,6 @@ function AppLayoutContent({ children }: AppLayoutProps) {
   const { isSidebarCollapsed, isViewsPanelOpen, setIsViewsPanelOpen } = useLayout();
   const [isInitialMount, setIsInitialMount] = useState(true);
   
-  // Don't show layout on login page
-  if (pathname === '/login') {
-    return <>{children}</>;
-  }
-  
-  const handleViewsPanelToggle = (open: boolean) => {
-    setIsViewsPanelOpen(open);
-    // Event is now emitted by setIsViewsPanelOpen in LayoutContext
-  };
-  
   // Remove initial mount flag after component mounts
   useEffect(() => {
     setIsClient(true);
@@ -34,6 +24,16 @@ function AppLayoutContent({ children }: AppLayoutProps) {
     
     return () => clearTimeout(timer);
   }, []);
+  
+  // Don't show layout on login page
+  if (pathname === '/login') {
+    return <>{children}</>;
+  }
+  
+  const handleViewsPanelToggle = (open: boolean) => {
+    setIsViewsPanelOpen(open);
+    // Event is now emitted by setIsViewsPanelOpen in LayoutContext
+  };
 
   return (
     <>

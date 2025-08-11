@@ -320,14 +320,16 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
   };
   
   const handleUndo = async () => {
-    const { undoLastImport } = useLeadStore.getState();
-    const result = await undoLastImport();
-    
-    if (result.success) {
-      toast.success(`Undone! Removed ${result.deletedCount} leads.`);
-    } else {
-      toast.error('Failed to undo import');
-    }
+    // TODO: Implement undo functionality
+    // const { undoLastImport } = useLeadStore.getState();
+    // const result = await undoLastImport();
+    // 
+    // if (result.success) {
+    //   toast.success(`Undone! Removed ${result.deletedCount} leads.`);
+    // } else {
+    //   toast.error('Failed to undo import');
+    // }
+    toast.error('Undo functionality not yet implemented');
   };
 
   const resetModal = () => {

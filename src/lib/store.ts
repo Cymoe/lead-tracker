@@ -87,6 +87,7 @@ interface LeadStore {
   setOpenAIApiKey: (key: string) => void;
   setViewMode: (mode: 'table' | 'grid') => void;
   setViewDensity: (density: 'compact' | 'expanded') => void;
+  initializeSettings: () => void;
   
   // Sorting
   sortBy: keyof Lead | null;
@@ -273,11 +274,11 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
     }
   })),
   
-  // Settings
-  googleScriptUrl: typeof window !== 'undefined' ? localStorage.getItem('googleScriptUrl') || '' : '',
-  openaiApiKey: typeof window !== 'undefined' ? localStorage.getItem('openaiApiKey') || '' : '',
-  viewMode: (typeof window !== 'undefined' ? localStorage.getItem('viewMode') || 'table' : 'table') as 'table' | 'grid',
-  viewDensity: (typeof window !== 'undefined' ? localStorage.getItem('viewDensity') || 'expanded' : 'expanded') as 'compact' | 'expanded',
+  // Settings - Initialize with defaults, load from localStorage later
+  googleScriptUrl: '',
+  openaiApiKey: '',
+  viewMode: 'table' as 'table' | 'grid',
+  viewDensity: 'expanded' as 'compact' | 'expanded',
   
   setGoogleScriptUrl: (url) => {
     if (typeof window !== 'undefined') {
@@ -305,6 +306,23 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
       localStorage.setItem('viewDensity', density);
     }
     set({ viewDensity: density });
+  },
+  
+  // Initialize settings from localStorage
+  initializeSettings: () => {
+    if (typeof window !== 'undefined') {
+      const googleScriptUrl = localStorage.getItem('googleScriptUrl') || '';
+      const openaiApiKey = localStorage.getItem('openaiApiKey') || '';
+      const viewMode = (localStorage.getItem('viewMode') || 'table') as 'table' | 'grid';
+      const viewDensity = (localStorage.getItem('viewDensity') || 'expanded') as 'compact' | 'expanded';
+      
+      set({
+        googleScriptUrl,
+        openaiApiKey,
+        viewMode,
+        viewDensity
+      });
+    }
   },
   
   // Sorting

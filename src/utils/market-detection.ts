@@ -162,8 +162,8 @@ export function detectMarketsFromLeads(leads: Lead[]): MarketHierarchy[] {
       const totalAds = cities.reduce((sum, c) => sum + c.withAds, 0);
       
       const metroMarket: DynamicMarket = {
-        id: `metro-${metro.name}-${stateName}`,
-        name: metro.name,
+        id: `metro-${metro!.name}-${stateName}`,
+        name: metro!.name,
         type: 'metro',
         state: stateName,
         cities: cities.map(c => c.city),

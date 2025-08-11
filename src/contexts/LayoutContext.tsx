@@ -12,36 +12,39 @@ interface LayoutContextType {
 const LayoutContext = createContext<LayoutContextType | undefined>(undefined);
 
 export function LayoutProvider({ children }: { children: ReactNode }) {
-  // Initialize sidebar state from localStorage synchronously to prevent flash
-  const [isSidebarCollapsed, setIsSidebarCollapsedState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sidebarCollapsed');
-      return saved === 'true';
-    }
-    return false;
-  });
+  // Initialize states with defaults
+  const [isSidebarCollapsed, setIsSidebarCollapsedState] = useState(false);
+  const [isViewsPanelOpen, setIsViewsPanelOpenState] = useState(false);
   
-  // Initialize views panel state from localStorage
-  const [isViewsPanelOpen, setIsViewsPanelOpenState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('viewsPanelOpen');
-      return saved === 'true';
+  // Load saved states after mount
+  useEffect(() => {
+    const savedSidebar = localStorage.getItem('sidebarCollapsed');
+    const savedViewsPanel = localStorage.getItem('viewsPanelOpen');
+    
+    if (savedSidebar === 'true') {
+      setIsSidebarCollapsedState(true);
     }
-    return false;
-  });
+    if (savedViewsPanel === 'true') {
+      setIsViewsPanelOpenState(true);
+    }
+  }, []);
 
   const setIsSidebarCollapsed = (collapsed: boolean) => {
     setIsSidebarCollapsedState(collapsed);
-    localStorage.setItem('sidebarCollapsed', collapsed.toString());
-    // Emit event for other components
-    window.dispatchEvent(new Event('sidebarToggled'));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sidebarCollapsed', collapsed.toString());
+      // Emit event for other components
+      window.dispatchEvent(new Event('sidebarToggled'));
+    }
   };
 
   const setIsViewsPanelOpen = (open: boolean) => {
     setIsViewsPanelOpenState(open);
-    localStorage.setItem('viewsPanelOpen', open.toString());
-    // Emit event for other components
-    window.dispatchEvent(new CustomEvent('viewsPanelToggled', { detail: { isOpen: open } }));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('viewsPanelOpen', open.toString());
+      // Emit event for other components
+      window.dispatchEvent(new CustomEvent('viewsPanelToggled', { detail: { isOpen: open } }));
+    }
   };
 
   // Listen for storage changes from other tabs

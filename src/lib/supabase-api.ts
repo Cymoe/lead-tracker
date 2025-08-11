@@ -233,7 +233,7 @@ export async function saveLead(lead: Partial<Lead>, supabase?: any, userId?: str
     });
   }
 
-  const dbLead = appToDbLead(lead, user_id);
+  const dbLead = appToDbLead(lead, user_id!);
   
   // Debug log the final database values
   if (!dbLead.city || !dbLead.state) {
@@ -272,7 +272,7 @@ export async function saveLeadsBatch(leads: Partial<Lead>[], supabase?: any, use
     user_id = user.id;
   }
 
-  const dbLeads = leads.map(lead => appToDbLead(lead, user_id));
+  const dbLeads = leads.map(lead => appToDbLead(lead, user_id!));
 
   // Use upsert with onConflict to handle duplicates gracefully
   // This will update existing leads with the same google_maps_url

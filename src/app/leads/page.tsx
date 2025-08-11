@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+export const dynamic = 'force-dynamic';
+
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useLeadStore } from '@/lib/store';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLayout } from '@/contexts/LayoutContext';
@@ -41,7 +43,7 @@ import { updateLeadsBatch } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { MapPinIcon } from '@heroicons/react/24/outline';
 
-export default function LeadsPage() {
+function LeadsContent() {
   const { 
     setLeads, 
     leads, 
@@ -52,6 +54,7 @@ export default function LeadsPage() {
     cityFilter,
     serviceTypeFilter,
     currentMarket,
+    setCurrentMarket,
     updateLead
   } = useLeadStore();
   const { user, loading } = useAuth();
@@ -458,7 +461,7 @@ export default function LeadsPage() {
                 {/* Show all leads button if filter is active */}
                 {currentMarket && currentMarket.id !== 'all' && (
                   <button
-                    onClick={() => setCurrentMarket({ id: 'all', name: 'All Markets', type: 'all', leadCount: leads.length })}
+                    onClick={() => setCurrentMarket({ id: 'all', name: 'All Markets', type: 'all', leadCount: leads.length, cities: [] })}
                     className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
                   >
                     Show All ({leads.length})
@@ -697,5 +700,13 @@ export default function LeadsPage() {
       
       {/* Undo notification */}
     </>
+  );
+}
+
+export default function LeadsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading...</div>}>
+      <LeadsContent />
+    </Suspense>
   );
 }

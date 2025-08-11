@@ -22,7 +22,7 @@ interface MarketInsight {
   title: string;
   description: string;
   icon: any;
-  color: string;
+  color: 'green' | 'orange' | 'purple' | 'blue' | 'yellow' | 'indigo';
   marketId?: string;
   actionLabel?: string;
   actionUrl?: string;

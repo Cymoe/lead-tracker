@@ -50,9 +50,9 @@ export default function MarketWorkflowPage() {
   const { data: leadsData, isLoading: isLoadingLeads } = useLeadsQuery();
   
   // Query for market coverage data
-  const { data: coverageData = [], isLoading: isLoadingCoverage } = useQuery({
+  const { data: coverageData = [], isLoading: isLoadingCoverage, refetch: refetchCoverage } = useQuery({
     queryKey: ['marketCoverage'],
-    queryFn: getAllMarketCoverage,
+    queryFn: () => getAllMarketCoverage(),
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
   });
   
@@ -94,7 +94,7 @@ export default function MarketWorkflowPage() {
 
   // Get coverage for a market
   const getMarketCoverage = (marketId: string) => {
-    return coverageData.find(c => c.market_id === marketId);
+    return coverageData.find(c => c.market_id === marketId) || null;
   };
 
   // Calculate coverage percentage for display
@@ -204,7 +204,7 @@ export default function MarketWorkflowPage() {
                 onClick={async () => {
                   const response = await fetch('/api/fix-market-coverage', { method: 'POST' });
                   if (response.ok) {
-                    loadData(); // Reload the data
+                    refetchCoverage(); // Reload the data
                   }
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"

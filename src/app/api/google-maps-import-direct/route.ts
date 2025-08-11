@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse city and state from the city input
-    const cityParts = city.split(',').map(p => p.trim());
+    const cityParts = city.split(',').map((p: string) => p.trim());
     const cityName = cityParts[0] || '';
     let stateName = '';
     
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
         email2: result.emails?.[1] || null,
         email3: result.emails?.[2] || null,
         service_type: result.categoryName || 'General',
-        lead_source: 'Google Maps',
+        lead_source: 'Google Maps' as const,
         search_query: searchQuery, // ALWAYS use manual search query
         rating: result.totalScore || null,
         review_count: result.reviewsCount || null,

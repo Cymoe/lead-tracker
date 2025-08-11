@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { normalizeServiceType } from '@/utils/service-type-normalization';
 
 export async function GET() {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   // Fetch ALL leads with service_type
   const { data: leads, error } = await supabase

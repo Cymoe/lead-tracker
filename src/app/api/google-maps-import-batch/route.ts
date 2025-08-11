@@ -94,7 +94,7 @@ export async function POST(request: Request) {
         phone: importData.phone || result.formatted_phone_number || '',
         website: importData.website || result.website || '',
         service_type: importData.service_type || metadata.service_type || '',
-        lead_source: 'Google Maps',
+        lead_source: 'Google Maps' as const,
         notes: '', // Will be generated after construction
         rating: result.rating || null,
         review_count: result.user_ratings_total || null,
@@ -106,10 +106,10 @@ export async function POST(request: Request) {
         twitter_url: result.social_media?.twitter?.[0] || null,
         handle: instagramHandle,
         user_id: user.id,
-        score: result.opportunity_score >= 90 ? 'A++' : 
+        score: (result.opportunity_score >= 90 ? 'A++' : 
                result.opportunity_score >= 80 ? 'A+' : 
                result.opportunity_score >= 70 ? 'A' : 
-               result.opportunity_score >= 60 ? 'B' : 'C'
+               result.opportunity_score >= 60 ? 'B' : 'C') as 'A++' | 'A+' | 'A' | 'B' | 'C'
       };
 
       // Generate notes based on actual lead data
@@ -146,7 +146,7 @@ export async function POST(request: Request) {
         await trackImportMetrics(
           metadata.market_id,
           metadata.phase || 1,
-          null, // import operation id removed
+          `batch-${Date.now()}`, // Generate a unique import ID
           {
             totalFound: results.length,
             duplicates: skippedDuplicates.length,

@@ -75,7 +75,7 @@ export function generateNotesFromLead(
   }
   
   // Lead source
-  if (lead.lead_source && lead.lead_source !== 'Manual Entry') {
+  if (lead.lead_source) {
     notes.push(`Source: ${lead.lead_source}`);
   }
   
