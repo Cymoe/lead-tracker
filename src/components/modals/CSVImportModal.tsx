@@ -6,7 +6,6 @@ import { saveLeadsBatch, updateLeadsBatch } from '@/lib/api';
 import { useRefreshLeads } from '@/hooks/useLeadsQuery';
 import { Lead } from '@/types';
 import toast from 'react-hot-toast';
-import { createImportOperation } from '@/lib/import-operations-api';
 import { parseCSV, autoDetectMappings, transformToLeads, validateLeads, FieldMapping } from '@/utils/csv-parser';
 
 interface CSVImportModalProps {
@@ -17,7 +16,7 @@ interface CSVImportModalProps {
 type ImportStep = 'upload' | 'mapping' | 'preview' | 'importing' | 'complete';
 
 export default function CSVImportModal({ open, onClose }: CSVImportModalProps) {
-  const { addLead, updateLead: updateLeadInStore, leads, setLastImportOperation } = useLeadStore();
+  const { addLead, updateLead: updateLeadInStore, leads } = useLeadStore();
   const refreshLeads = useRefreshLeads();
   const [step, setStep] = useState<ImportStep>('upload');
   const [file, setFile] = useState<File | null>(null);
@@ -429,7 +428,6 @@ export default function CSVImportModal({ open, onClose }: CSVImportModalProps) {
       }
       
       // Create import operation record if we have new leads OR updates
-      let importOperation = null;
       if (newLeadsCopy.length > 0 || leadsToUpdateCopy.length > 0) {
         try {
           const operationMetadata = {
@@ -451,14 +449,7 @@ export default function CSVImportModal({ open, onClose }: CSVImportModalProps) {
             metadata: operationMetadata
           });
           
-          importOperation = await createImportOperation(
-            'csv_import',
-            'CSV Import',
-            newLeadsCopy.length + leadsToUpdateCopy.length,
-            operationMetadata
-          );
-          
-          console.log('Import operation created successfully:', importOperation);
+          // Import operation tracking removed
         } catch (error) {
           console.error('Error creating import operation:', error);
           console.error('Full error details:', {
@@ -481,13 +472,8 @@ export default function CSVImportModal({ open, onClose }: CSVImportModalProps) {
         console.log(`Inserting ${newLeadsCopy.length} new leads...`);
         toast(`Creating ${newLeadsCopy.length} new leads...`, { icon: '➕' });
         
-        // Add operation ID to all new leads if we have one
-        const leadsWithOperationId = importOperation 
-          ? newLeadsCopy.map(lead => ({
-              ...lead,
-              import_operation_id: importOperation.id
-            }))
-          : newLeadsCopy;
+        // Use leads directly
+        const leadsWithOperationId = newLeadsCopy;
         
         for (let i = 0; i < leadsWithOperationId.length; i += BATCH_SIZE) {
           const batch = leadsWithOperationId.slice(i, i + BATCH_SIZE);
@@ -546,9 +532,6 @@ export default function CSVImportModal({ open, onClose }: CSVImportModalProps) {
         }
         
         // Store the import operation for undo functionality if we created new leads
-        if (importOperation && newCount > 0) {
-          setLastImportOperation(importOperation);
-        }
         
         toast.success(message);
         

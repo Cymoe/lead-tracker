@@ -187,11 +187,11 @@ export default function DuplicateDetectionModal({ open, onClose }: DuplicateDete
 
   const getMatchTypeColor = (matchType: string): string => {
     switch (matchType) {
-      case 'phone': return 'text-red-600 bg-red-50';
-      case 'instagram': return 'text-purple-600 bg-purple-50';
-      case 'company': return 'text-blue-600 bg-blue-50';
-      case 'fuzzy': return 'text-yellow-600 bg-yellow-50';
-      default: return 'text-gray-600 bg-gray-50';
+      case 'phone': return 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-900/20';
+      case 'instagram': return 'text-purple-600 bg-purple-50 dark:text-purple-400 dark:bg-purple-900/20';
+      case 'company': return 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/20';
+      case 'fuzzy': return 'text-yellow-600 bg-yellow-50 dark:text-yellow-400 dark:bg-yellow-900/20';
+      default: return 'text-gray-600 bg-gray-50 dark:text-gray-400 dark:bg-gray-800';
     }
   };
 
@@ -223,12 +223,12 @@ export default function DuplicateDetectionModal({ open, onClose }: DuplicateDete
               leaveFrom="opacity-100 translate-y-0 sm:scale-100"
               leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
             >
-              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl">
-                <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+              <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-4xl">
+                <div className="bg-white dark:bg-gray-800 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                   <div className="absolute right-0 top-0 pr-4 pt-4">
                     <button
                       type="button"
-                      className="rounded-md bg-white text-gray-400 hover:text-gray-500"
+                      className="rounded-md bg-white dark:bg-gray-800 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400"
                       onClick={onClose}
                     >
                       <XMarkIcon className="h-6 w-6" />
@@ -236,39 +236,39 @@ export default function DuplicateDetectionModal({ open, onClose }: DuplicateDete
                   </div>
 
                   <div className="sm:flex sm:items-start">
-                    <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
-                      <MagnifyingGlassIcon className="h-6 w-6 text-blue-600" />
+                    <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900 sm:mx-0 sm:h-10 sm:w-10">
+                      <MagnifyingGlassIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left w-full">
-                      <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900">
+                      <Dialog.Title as="h3" className="text-lg font-semibold leading-6 text-gray-900 dark:text-gray-100">
                         Duplicate Detection
                       </Dialog.Title>
 
                       {isScanning ? (
                         <div className="mt-4 text-center py-8">
                           <div className="inline-flex items-center">
-                            <svg className="animate-spin h-8 w-8 text-blue-600 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <svg className="animate-spin h-8 w-8 text-blue-600 dark:text-blue-400 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <span className="text-lg">Scanning for duplicates...</span>
+                            <span className="text-lg text-gray-900 dark:text-gray-100">Scanning for duplicates...</span>
                           </div>
                         </div>
                       ) : (
                         <div className="mt-4">
                           {duplicateGroups.length === 0 ? (
                             <div className="text-center py-8">
-                              <CheckCircleIcon className="mx-auto h-12 w-12 text-green-500" />
-                              <p className="mt-2 text-lg font-medium text-gray-900">No duplicates found!</p>
-                              <p className="mt-1 text-sm text-gray-500">Your lead database is clean.</p>
+                              <CheckCircleIcon className="mx-auto h-12 w-12 text-green-500 dark:text-green-400" />
+                              <p className="mt-2 text-lg font-medium text-gray-900 dark:text-gray-100">No duplicates found!</p>
+                              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Your lead database is clean.</p>
                             </div>
                           ) : (
                             <>
-                              <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-md p-3">
+                              <div className="mb-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-3">
                                 <div className="flex">
-                                  <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400" />
+                                  <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400 dark:text-yellow-500" />
                                   <div className="ml-3">
-                                    <p className="text-sm text-yellow-800">
+                                    <p className="text-sm text-yellow-800 dark:text-yellow-200">
                                       Found <span className="font-semibold">{duplicateGroups.length}</span> duplicate groups
                                       containing <span className="font-semibold">{totalDuplicates}</span> duplicate leads.
                                     </p>
@@ -279,13 +279,13 @@ export default function DuplicateDetectionModal({ open, onClose }: DuplicateDete
                               <div className="mb-4 flex justify-between items-center">
                                 <button
                                   onClick={toggleAllGroups}
-                                  className="text-sm text-blue-600 hover:text-blue-800"
+                                  className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
                                 >
                                   {selectedGroups.size === duplicateGroups.length ? 'Deselect all' : 'Select all'}
                                 </button>
                                 <button
                                   onClick={scanForDuplicates}
-                                  className="text-sm text-gray-600 hover:text-gray-800"
+                                  className="text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300"
                                 >
                                   Rescan
                                 </button>
@@ -296,7 +296,9 @@ export default function DuplicateDetectionModal({ open, onClose }: DuplicateDete
                                   <div
                                     key={group.id}
                                     className={`border rounded-lg p-4 ${
-                                      selectedGroups.has(group.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                                      selectedGroups.has(group.id) 
+                                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-400' 
+                                        : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700'
                                     }`}
                                   >
                                     <div className="flex items-start">
@@ -312,7 +314,7 @@ export default function DuplicateDetectionModal({ open, onClose }: DuplicateDete
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getMatchTypeColor(group.matchType || 'company')}`}>
                                               {getMatchTypeLabel(group.matchType || 'company')}
                                             </span>
-                                            <span className="text-sm text-gray-500">
+                                            <span className="text-sm text-gray-500 dark:text-gray-400">
                                               {group.leads.length} leads • {Math.round(group.confidence * 100)}% confidence
                                             </span>
                                           </div>
@@ -333,11 +335,11 @@ export default function DuplicateDetectionModal({ open, onClose }: DuplicateDete
                                                 className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                                               />
                                               <div className="flex-1">
-                                                <span className="font-medium">{lead.company_name}</span>
-                                                {lead.phone && <span className="text-gray-500 ml-2">{lead.phone}</span>}
-                                                {lead.city && <span className="text-gray-500 ml-2">{lead.city}</span>}
+                                                <span className="font-medium text-gray-900 dark:text-gray-100">{lead.company_name}</span>
+                                                {lead.phone && <span className="text-gray-500 dark:text-gray-400 ml-2">{lead.phone}</span>}
+                                                {lead.city && <span className="text-gray-500 dark:text-gray-400 ml-2">{lead.city}</span>}
                                                 {masterLeads[group.id] === lead.id && (
-                                                  <span className="ml-2 text-xs text-blue-600">(Keep this one)</span>
+                                                  <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">(Keep this one)</span>
                                                 )}
                                               </div>
                                             </label>
@@ -356,20 +358,20 @@ export default function DuplicateDetectionModal({ open, onClose }: DuplicateDete
                   </div>
                 </div>
 
-                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                <div className="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
                   {duplicateGroups.length > 0 && !isScanning && (
                     <button
                       type="button"
                       onClick={handleMergeSelected}
                       disabled={selectedGroups.size === 0 || isProcessing}
-                      className="inline-flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex w-full justify-center rounded-md bg-blue-600 dark:bg-blue-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 dark:hover:bg-blue-400 sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isProcessing ? 'Merging...' : `Merge ${selectedGroups.size} Selected`}
                     </button>
                   )}
                   <button
                     type="button"
-                    className="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto"
+                    className="mt-3 inline-flex w-full justify-center rounded-md bg-white dark:bg-gray-700 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-gray-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 sm:mt-0 sm:w-auto"
                     onClick={onClose}
                   >
                     Close

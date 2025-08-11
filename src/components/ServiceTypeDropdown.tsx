@@ -26,9 +26,9 @@ export default function ServiceTypeDropdown({
   const [searchTerm, setSearchTerm] = useState(value || '');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Debug: Log the business types
-  console.log('Business categories:', GREY_TSUNAMI_CATEGORIES.length);
-  console.log('Total business types:', ALL_BUSINESS_TYPES.length);
+  // Debug: Log the business types (commented out to reduce console noise)
+  // console.log('Business categories:', GREY_TSUNAMI_CATEGORIES.length);
+  // console.log('Total business types:', ALL_BUSINESS_TYPES.length);
 
   useEffect(() => {
     setSearchTerm(value || '');

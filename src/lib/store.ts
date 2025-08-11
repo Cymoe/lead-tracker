@@ -1,10 +1,34 @@
 import { create } from 'zustand';
-import { Lead, KeywordSession, DynamicMarket, MarketHierarchy, ImportOperation } from '@/types';
+import { Lead, KeywordSession, DynamicMarket, MarketHierarchy } from '@/types';
 import { detectMetroArea, groupCitiesByMetro } from '@/utils/metro-areas';
 import { normalizeState } from '@/utils/state-utils';
 import { getStateFromPhone } from '@/utils/area-codes';
 import { getCityFromPhone } from '@/utils/area-code-cities';
-import { getLastImportOperation, revertImportOperation } from './import-operations-api';
+
+interface ImportStatus {
+  id: string;
+  type: 'apify' | 'csv' | 'google-maps';
+  status: 'connecting' | 'processing' | 'finalizing' | 'completed' | 'error';
+  message: string;
+  details?: string;
+  metadata?: {
+    runId?: string;
+    searchQuery?: string;
+    city?: string;
+    filename?: string;
+  };
+  progress?: {
+    current: number;
+    total: number;
+  };
+  startedAt: Date;
+  completedAt?: Date;
+  result?: {
+    imported: number;
+    skipped: number;
+    failed: number;
+  };
+}
 
 interface LeadStore {
   // Leads
@@ -14,9 +38,12 @@ interface LeadStore {
   selectedLeads: string[];
   newlyImportedLeads: string[]; // Track newly imported lead IDs
   
-  // Import Operations
-  lastImportOperation: ImportOperation | null;
-  undoInProgress: boolean;
+  // Import Status
+  activeImports: ImportStatus[];
+  addImportStatus: (status: Omit<ImportStatus, 'id' | 'startedAt'>) => string;
+  updateImportStatus: (id: string, updates: Partial<ImportStatus>) => void;
+  removeImportStatus: (id: string) => void;
+  clearCompletedImports: () => void;
   
   // Actions
   setLeads: (leads: Lead[]) => void;
@@ -27,8 +54,6 @@ interface LeadStore {
   setSelectedLeads: (ids: string[]) => void;
   clearNewlyImported: () => void; // Clear newly imported highlights
   resetAllLeads: () => void; // Reset all leads data
-  setLastImportOperation: (operation: ImportOperation | null) => void;
-  undoLastImport: () => Promise<{ success: boolean; deletedCount: number }>;
   
   // Filters
   sourceFilter: {
@@ -79,6 +104,35 @@ interface LeadStore {
   getMarketStats: (market: DynamicMarket) => { totalLeads: number; withAds: number; adPercentage: number };
 }
 
+// Helper to save imports to localStorage
+const saveImportsToStorage = (imports: ImportStatus[]) => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('activeImports', JSON.stringify(imports));
+  }
+};
+
+// Helper to load imports from localStorage
+const loadImportsFromStorage = (): ImportStatus[] => {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('activeImports');
+    if (stored) {
+      try {
+        const imports = JSON.parse(stored);
+        // Convert date strings back to Date objects
+        return imports.map((imp: any) => ({
+          ...imp,
+          startedAt: new Date(imp.startedAt),
+          completedAt: imp.completedAt ? new Date(imp.completedAt) : undefined
+        }));
+      } catch (e) {
+        console.error('Failed to parse stored imports:', e);
+        return [];
+      }
+    }
+  }
+  return [];
+};
+
 export const useLeadStore = create<LeadStore>((set, get) => ({
   // Initial state
   leads: [],
@@ -86,10 +140,45 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
   error: null,
   selectedLeads: [],
   newlyImportedLeads: [],
+  activeImports: loadImportsFromStorage(),
   
-  // Import Operations
-  lastImportOperation: null,
-  undoInProgress: false,
+  // Import Status actions
+  addImportStatus: (status) => {
+    const id = `import-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const newImport: ImportStatus = {
+      ...status,
+      id,
+      startedAt: new Date()
+    };
+    set((state) => {
+      const newImports = [...state.activeImports, newImport];
+      saveImportsToStorage(newImports);
+      return { activeImports: newImports };
+    });
+    return id;
+  },
+  
+  updateImportStatus: (id, updates) => set((state) => {
+    const newImports = state.activeImports.map(imp => 
+      imp.id === id ? { ...imp, ...updates } : imp
+    );
+    saveImportsToStorage(newImports);
+    return { activeImports: newImports };
+  }),
+  
+  removeImportStatus: (id) => set((state) => {
+    const newImports = state.activeImports.filter(imp => imp.id !== id);
+    saveImportsToStorage(newImports);
+    return { activeImports: newImports };
+  }),
+  
+  clearCompletedImports: () => set((state) => {
+    const newImports = state.activeImports.filter(imp => 
+      imp.status !== 'completed' && imp.status !== 'error'
+    );
+    saveImportsToStorage(newImports);
+    return { activeImports: newImports };
+  }),
   
   // Lead actions
   setLeads: (leads) => set({ leads }),
@@ -114,38 +203,8 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
     leads: [], 
     selectedLeads: [], 
     newlyImportedLeads: [],
-    error: null,
-    lastImportOperation: null
+    error: null
   }),
-  setLastImportOperation: (operation) => set({ lastImportOperation: operation }),
-  undoLastImport: async () => {
-    const state = get();
-    if (!state.lastImportOperation || state.undoInProgress) {
-      return { success: false, deletedCount: 0 };
-    }
-    
-    set({ undoInProgress: true });
-    
-    try {
-      const result = await revertImportOperation(state.lastImportOperation.id);
-      
-      if (result.success) {
-        // Remove the deleted leads from the store
-        const leadsToKeep = state.leads.filter(
-          lead => lead.import_operation_id !== state.lastImportOperation?.id
-        );
-        set({ 
-          leads: leadsToKeep,
-          lastImportOperation: null,
-          newlyImportedLeads: []
-        });
-      }
-      
-      return result;
-    } finally {
-      set({ undoInProgress: false });
-    }
-  },
   
   // Filter state
   sourceFilter: {
@@ -280,13 +339,23 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
     const stateMap = new Map<string, { count: number; withAds: number; cities: Set<string> }>();
     
     leads.forEach(lead => {
+      // ALWAYS use the city and state from the lead data first
+      // This ensures leads stay in the market they were imported for
       let city = lead.city?.trim() || '';
       let state = normalizeState(lead.state);
       
-      // Try multiple fallback methods to detect location
-      if (!state || !city) {
+      // Only use fallback detection if BOTH city and state are missing
+      // This prevents leads from being reassigned to different markets
+      if (!state && !city) {
+        // For unassigned leads, we'll keep them unassigned rather than
+        // creating phantom markets from phone numbers or company names
+        // This ensures clean market segregation based on actual import locations
+        
+        // You can uncomment the code below if you want fallback detection
+        // but it may create unwanted market entries like "Vancouver"
+        /*
         // Method 1: Extract city from company name if not already set
-        if (!city && lead.company_name) {
+        if (lead.company_name) {
           // Common patterns: "Company - City" or "Company in City"
           const dashMatch = lead.company_name.match(/\s*-\s*([A-Za-z\s]+?)$/);
           const inMatch = lead.company_name.match(/\sin\s+([A-Za-z\s]+?)$/i);
@@ -298,37 +367,19 @@ export const useLeadStore = create<LeadStore>((set, get) => ({
             const detectedMetro = detectMetroArea(trimmedCity, '');
             if (detectedMetro) {
               city = trimmedCity;
-              if (!state) {
-                state = detectedMetro.state;
-              }
+              state = detectedMetro.state;
             }
           }
         }
         
-        // Method 2: If we have city but no state, detect state from metro areas
-        if (city && !state) {
-          const detectedMetro = detectMetroArea(city, '');
-          if (detectedMetro) {
-            state = detectedMetro.state;
-          }
+        // Method 2: Use phone as last resort only if nothing else worked
+        if (!city && !state && lead.phone) {
+          const phoneState = getStateFromPhone(lead.phone);
+          const phoneCity = getCityFromPhone(lead.phone);
+          if (phoneState) state = phoneState;
+          if (phoneCity) city = phoneCity;
         }
-        
-        // Method 3: If we have phone, detect both city and state
-        if (lead.phone) {
-          if (!state) {
-            const phoneState = getStateFromPhone(lead.phone);
-            if (phoneState) {
-              state = phoneState;
-            }
-          }
-          
-          if (!city) {
-            const phoneCity = getCityFromPhone(lead.phone);
-            if (phoneCity) {
-              city = phoneCity;
-            }
-          }
-        }
+        */
       }
       
       if (city || state) {

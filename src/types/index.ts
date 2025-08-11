@@ -76,7 +76,6 @@ export interface Lead {
   notes?: string | null;
   score: 'A++' | 'A+' | 'A' | 'B' | 'C' | null;
   close_crm_id?: string | null;
-  import_operation_id?: string | null;
   created_at: string;
   updated_at: string;
   // Temporary field for duplicate tracking during import
@@ -151,33 +150,6 @@ export interface MetroAreaDefinition {
   state: string;
   cities: string[];
   aliases?: string[]; // Alternative names
-}
-
-// Import operation tracking for undo functionality
-export interface ImportOperation {
-  id: string;
-  user_id: string;
-  operation_type: 'bulk_import' | 'csv_import' | 'google_maps_import' | 'manual_add';
-  source: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | 'CSV Import';
-  lead_count: number;
-  metadata: {
-    city?: string;
-    service_type?: string;
-    keywords?: string[];
-    import_mode?: 'new' | 'update' | 'all';
-    phase?: 1 | 2 | 3;
-    market_id?: string;
-    market_name?: string;
-    parent_phase_id?: string;
-    coverage_context?: {
-      service_type?: string;
-      search_query?: string;
-    };
-    [key: string]: any;
-  };
-  created_at: string;
-  reverted_at: string | null;
-  reverted_by: string | null;
 }
 
 // Market coverage tracking

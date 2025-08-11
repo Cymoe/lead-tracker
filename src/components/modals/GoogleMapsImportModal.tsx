@@ -1,16 +1,17 @@
-import { Fragment, useState, useEffect } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon, MagnifyingGlassIcon, MapPinIcon } from '@heroicons/react/24/outline';
 import { CheckCircleIcon, ClockIcon } from '@heroicons/react/24/solid';
 import { useLeadStore } from '@/lib/store';
-import { saveLead, mergeLeadData } from '@/lib/api';
+import { mergeLeadData } from '@/lib/api';
 import { Lead } from '@/types';
 import toast from 'react-hot-toast';
-import { createImportOperation } from '@/lib/import-operations-api';
 import { trackImportMetrics } from '@/lib/market-coverage-api';
+import { updateMarketCoverageFromLeads } from '@/lib/update-market-coverage';
 import USCityAutocomplete from '../USCityAutocomplete';
 import ServiceTypeDropdown from '../ServiceTypeDropdown';
 import { useRefreshLeads } from '@/hooks/useLeadsQuery';
+import { safeJsonParse } from '@/utils/safe-json-parse';
 
 interface GoogleMapsImportModalProps {
   open: boolean;
@@ -55,8 +56,9 @@ interface CostEstimate {
 }
 
 export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImportModalProps) {
-  const { addLead, leads, updateLead } = useLeadStore();
+  const { addLead, leads, updateLead, addImportStatus, updateImportStatus } = useLeadStore();
   const refreshLeads = useRefreshLeads();
+  const isMountedRef = useRef(true);
   const [serviceType, setServiceType] = useState('');
   const [city, setCity] = useState('');
   const [radius, setRadius] = useState(10); // km
@@ -75,9 +77,20 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
   const [showApifyImport, setShowApifyImport] = useState(false);
   const [apifyRunId, setApifyRunId] = useState('');
   const [isImportingApify, setIsImportingApify] = useState(false);
+  const [importProgress, setImportProgress] = useState<{
+    status: string;
+    details?: string;
+  }>({ status: '' });
   const [currentSearchId, setCurrentSearchId] = useState<string | null>(null);
   const [hideNonContractors, setHideNonContractors] = useState(false);
   const [autoSelectContractors, setAutoSelectContractors] = useState(true);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   
   // Check URL parameters when modal opens
   useEffect(() => {
@@ -178,140 +191,140 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
       toast.error('Please enter an Apify run ID');
       return;
     }
+    
+    // Validate run ID format
+    if (apifyRunId.includes('/')) {
+      toast.error('Invalid run ID format. Please enter a run ID like "cj0hg4MwJnfX0Qz2C", not an actor name.');
+      return;
+    }
+    
+    if (!serviceType.trim()) {
+      toast.error('Please enter the search query from Apify');
+      return;
+    }
+    
+    if (!city.trim()) {
+      toast.error('Please enter the city');
+      return;
+    }
 
     setIsImportingApify(true);
+    
+    // Add import to global status
+    const importId = addImportStatus({
+      type: 'apify',
+      status: 'connecting',
+      message: 'Importing from Apify',
+      details: `Run ID: ${apifyRunId.trim()}`,
+      metadata: {
+        runId: apifyRunId.trim(),
+        searchQuery: serviceType.trim(),
+        city: city.trim()
+      }
+    });
+    
+    setImportProgress({ 
+      status: 'Connecting to Apify...', 
+      details: 'Fetching data from run ID: ' + apifyRunId.trim() 
+    });
+    
     try {
-      const response = await fetch('/api/apify-import', {
+      // Add a small delay to ensure user sees the initial status
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      updateImportStatus(importId, {
+        status: 'processing',
+        message: 'Processing leads from Apify',
+        details: `${serviceType.trim()} in ${city.trim()}`
+      });
+      
+      setImportProgress({ 
+        status: 'Processing leads...', 
+        details: 'Importing data for ' + serviceType.trim() + ' in ' + city.trim() 
+      });
+      
+      // Use the new direct import endpoint
+      const response = await fetch('/api/google-maps-import-direct', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          runId: apifyRunId.trim()
+          runId: apifyRunId.trim(),
+          searchQuery: serviceType.trim(),
+          city: city.trim()
         })
+      });
+
+      updateImportStatus(importId, {
+        status: 'finalizing',
+        message: 'Saving leads to database'
+      });
+
+      setImportProgress({ 
+        status: 'Finalizing import...', 
+        details: 'Saving leads to database' 
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        if (response.status === 409 && data.existingImport) {
-          // Import already exists or in progress
-          if (data.existingImport.status === 'completed') {
-            // Check if this was a failed import (0 leads imported)
-            if (data.existingImport.leadsImported === 0) {
-              toast((t) => (
-                <div className="flex flex-col gap-2">
-                  <span>This import failed previously. Would you like to retry?</span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={async () => {
-                        toast.dismiss(t.id);
-                        // Reset the import status
-                        try {
-                          const resetResponse = await fetch('/api/reset-failed-import', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ searchResultId: data.existingImport.id })
-                          });
-                          
-                          if (resetResponse.ok) {
-                            toast.success('Import reset. Please try again.');
-                            // Retry the import
-                            setTimeout(() => handleApifyImport(), 500);
-                          } else {
-                            toast.error('Failed to reset import');
-                          }
-                        } catch (error) {
-                          toast.error('Failed to reset import');
-                        }
-                      }}
-                      className="text-sm font-medium text-blue-600 hover:text-blue-500"
-                    >
-                      Retry Import
-                    </button>
-                    <button
-                      onClick={() => toast.dismiss(t.id)}
-                      className="text-sm font-medium text-gray-600 hover:text-gray-500"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ), {
-                duration: 10000
-              });
-            } else {
-              toast((t) => (
-                <div className="flex flex-col gap-3">
-                  <span className="font-medium">This Apify run has already been imported ({data.existingImport.leadsImported} leads)</span>
-                  <button
-                    onClick={async () => {
-                      toast.dismiss(t.id);
-                      await handleResetAllImports();
-                      // Retry after reset
-                      setTimeout(() => handleApifyImport(), 500);
-                    }}
-                    className="self-start px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
-                  >
-                    Reset Import Records & Retry
-                  </button>
-                </div>
-              ), {
-                duration: 15000
-              });
-            }
-          } else if (data.existingImport.status === 'processing') {
-            toast.error('This import is already in progress. Please wait for it to complete.');
-          }
-          setIsImportingApify(false);
-          return;
-        }
-        if (data.setupInstructions) {
-          setApiKeyError(true);
-        }
-        console.error('Apify import error details:', data);
+        console.error('Import error:', data);
         throw new Error(data.error || 'Import failed');
       }
 
-      // Store the saved search ID for the import process
-      setCurrentSearchId(data.savedSearchId);
+      // Debug log to see what we're getting
+      console.log('Import API response:', data);
+
+      // Update global status with results
+      updateImportStatus(importId, {
+        status: 'completed',
+        message: 'Import completed successfully',
+        completedAt: new Date(),
+        result: {
+          imported: data.imported || 0,
+          skipped: data.skipped || 0,
+          failed: data.failed || 0
+        }
+      });
+
+      // Direct import completed successfully
+      toast.success(`Imported ${data.imported} leads successfully!`);
+      if (data.skipped > 0) {
+        toast(`Skipped ${data.skipped} duplicate leads`, {
+          icon: 'ℹ️',
+        });
+      }
       
-      setResults(data.results);
-      setHasSearched(true);
+      // Reset form and close modal - user can track progress in the indicator
+      setApifyRunId('');
+      setServiceType('');
+      setCity('');
       setShowApifyImport(false);
       
-      // Show import status
-      if (data.importStatus) {
-        toast.success(data.importStatus.message);
-      }
+      // Refresh leads to show new data
+      await refreshLeads();
       
-      // Auto-select based on preferences
-      if (autoSelectContractors) {
-        const selectedIds = new Set<string>(
-          data.results
-            .filter((r: PlaceResult) => {
-              const businessType = classifyBusiness(r);
-              return businessType === 'contractor' || 
-                     (businessType === 'unknown' && r.opportunity_score >= 80);
-            })
-            .map((r: PlaceResult) => r.place_id)
-        );
-        setSelectedIds(selectedIds);
-      } else {
-        const highOpportunityIds = new Set<string>(
-          data.results
-            .filter((r: PlaceResult) => r.opportunity_score >= 80)
-            .map((r: PlaceResult) => r.place_id)
-        );
-        setSelectedIds(highOpportunityIds);
-      }
-
-      toast.success(`Imported ${data.count} businesses from Apify!`);
+      onClose(); // Close the modal
       
-      // Reload previous searches to include the imported one
     } catch (error) {
       console.error('Import error:', error);
-      toast.error(error instanceof Error ? error.message : 'Import failed');
+      
+      // Only update status and show error if component is still mounted
+      if (isMountedRef.current) {
+        // Update global status with error
+        updateImportStatus(importId, {
+          status: 'error',
+          message: 'Import failed',
+          details: error instanceof Error ? error.message : 'Unknown error',
+          completedAt: new Date()
+        });
+        
+        toast.error(error instanceof Error ? error.message : 'Import failed');
+      }
     } finally {
-      setIsImportingApify(false);
+      if (isMountedRef.current) {
+        setIsImportingApify(false);
+        setImportProgress({ status: '' });
+      }
     }
   };
 
@@ -528,98 +541,7 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
   };
 
   const handleImport = async () => {
-    // If we have a saved search ID from Apify import, use the new two-step process
-    if (currentSearchId && searchMode === 'apify') {
-      const toastId = toast.loading('Processing import...');
-      try {
-        const response = await fetch('/api/apify-import-process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ searchResultId: currentSearchId })
-        });
-
-        let data;
-        try {
-          data = await response.json();
-        } catch (jsonError) {
-          console.error('Failed to parse response JSON:', jsonError);
-          console.error('Response status:', response.status);
-          console.error('Response text:', await response.text());
-          throw new Error(`Server error: ${response.status}`);
-        }
-
-        if (!response.ok) {
-          console.error('Import API error:', {
-            status: response.status,
-            data,
-            error: data.error,
-            details: data.details
-          });
-          
-          if (response.status === 409) {
-            toast.error(data.error, { id: toastId });
-            return;
-          }
-          throw new Error(data.error || data.details || 'Import failed');
-        }
-
-        toast.dismiss(toastId);
-        
-        if (data.imported > 0) {
-          // Store the import operation for undo functionality
-          const importOp = {
-            id: data.importOperationId,
-            lead_count: data.imported
-          };
-          useLeadStore.getState().setLastImportOperation(importOp);
-          
-          // Show success with undo option
-          toast((t) => (
-            <div className="flex items-center justify-between gap-4">
-              <span>Successfully imported {data.imported} leads!</span>
-              <button
-                onClick={() => {
-                  toast.dismiss(t.id);
-                  handleUndo();
-                }}
-                className="text-sm font-medium text-blue-600 hover:text-blue-500"
-              >
-                Undo
-              </button>
-            </div>
-          ), {
-            duration: 5000,
-            id: 'apify-import-success'
-          });
-          
-          // Refresh leads to show the imported data immediately
-          refreshLeads();
-          
-          // Trigger market coverage update in the background
-          fetch('/api/fix-market-coverage', { method: 'POST' })
-            .then(response => {
-              if (response.ok) {
-                console.log('Market coverage updated after Apify import');
-              }
-            })
-            .catch(error => {
-              console.error('Failed to update market coverage:', error);
-            });
-        } else {
-          toast.error(`Import failed: ${data.failed} errors`, { id: toastId });
-        }
-        
-        onClose();
-        resetModal();
-        return;
-      } catch (error) {
-        console.error('Import process error:', error);
-        toast.error(error instanceof Error ? error.message : 'Import failed', { id: toastId });
-        return;
-      }
-    }
-
-    // Original import logic for non-Apify searches
+    // This is for the normal search flow, not the Apify import
     const selectedResults = results.filter(r => selectedIds.has(r.place_id));
     
     if (selectedResults.length === 0) {
@@ -627,243 +549,7 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
       return;
     }
 
-    let successCount = 0;
-    let duplicateCount = 0;
-    const importedLeadIds: string[] = [];
-    const toastId = toast.loading(`Importing ${selectedResults.length} leads...`);
-    
-    // Extract city and state for market detection
-    const cityParts = city.split(',').map(part => part.trim());
-    const cityName = cityParts[0];
-    const stateName = cityParts.length > 1 ? cityParts[cityParts.length - 1] : '';
-    
-    // Determine market ID and name
-    let marketId = '';
-    let marketName = '';
-    let marketType = '';
-    
-    if (stateName && cityName) {
-      // City-level market
-      marketId = `city-${cityName}-${stateName}`;
-      marketName = `${cityName}, ${stateName}`;
-      marketType = 'city';
-    } else if (stateName) {
-      // State-level market
-      marketId = `state-${stateName}`;
-      marketName = stateName;
-      marketType = 'state';
-    }
-
-    // Create import operation record with phase tracking
-    const importOperation = await createImportOperation(
-      'google_maps_import',
-      'Google Maps',
-      selectedResults.length,
-      {
-        city: city,
-        service_type: serviceType,
-        search_mode: searchMode,
-        radius: radius,
-        max_results: maxResults,
-        selected_count: selectedResults.length,
-        // Phase tracking metadata
-        phase: 1,
-        market_id: marketId,
-        market_name: marketName,
-        coverage_context: {
-          service_type: serviceType,
-          search_query: `${serviceType} in ${city}`
-        }
-      }
-    );
-    
-    if (!importOperation) {
-      toast.error('Failed to create import operation', { id: toastId });
-      return;
-    }
-
-    for (const result of selectedResults) {
-      // Use city from search form and extract state
-      let leadCity = city;
-      let leadState = null;
-      
-      // Extract state from city string (e.g., "Amarillo, TX" -> "TX")
-      const cityParts = city.split(',').map(part => part.trim());
-      if (cityParts.length > 1) {
-        leadCity = cityParts[0]; // Just the city name
-        leadState = cityParts[cityParts.length - 1]; // The state abbreviation
-      }
-      
-      // Extract Instagram handle if available
-      let instagramHandle = null;
-      let instagramUrl = null;
-      
-      if (result.social_media?.instagram && result.social_media.instagram.length > 0) {
-        instagramUrl = result.social_media.instagram[0];
-        // Extract handle from Instagram URL (e.g., https://www.instagram.com/username/ -> @username)
-        const match = instagramUrl.match(/instagram\.com\/([^\/\?]+)/);
-        if (match) {
-          instagramHandle = `@${match[1]}`;
-        }
-      }
-      
-      // Check for duplicates
-      const existingLead = leads.find(
-        existing => 
-          existing.company_name.toLowerCase() === result.import_ready.company_name.toLowerCase() &&
-          existing.city?.toLowerCase() === leadCity.toLowerCase()
-      );
-
-      if (existingLead) {
-        duplicateCount++;
-        // Merge data instead of skipping
-        try {
-          const mergedLead = await mergeLeadData(existingLead, {
-            company_name: result.import_ready.company_name,
-            service_type: result.import_ready.service_type,
-            city: leadCity,
-            state: leadState,
-            phone: result.import_ready.phone,
-            website: result.import_ready.website,
-            google_maps_url: `https://www.google.com/maps/place/?q=place_id:${result.place_id}`,
-            address: result.formatted_address || null,
-            rating: result.rating,
-            review_count: result.user_ratings_total,
-            lead_source: 'Google Maps',
-            notes: result.import_ready.notes,
-            instagram_url: instagramUrl,
-            handle: instagramHandle,
-          });
-
-          if (mergedLead) {
-            updateLead(mergedLead);
-            successCount++;
-            importedLeadIds.push(mergedLead.id);
-            toast.success(`Merged data for ${result.name}`);
-          }
-        } catch (error) {
-          console.error('Error merging lead:', error);
-          toast.error(`Failed to merge ${result.name}`);
-        }
-      } else {
-        // Create new lead if not duplicate
-        const newLead: Lead = {
-          id: crypto.randomUUID(),
-          user_id: '', // Will be set by the API
-          handle: instagramHandle,
-          company_name: result.import_ready.company_name,
-          service_type: result.import_ready.service_type,
-          city: leadCity,
-          state: leadState,
-          phone: result.import_ready.phone,
-          email: result.emails && result.emails.length > 0 ? result.emails[0] : null,
-          instagram_url: instagramUrl,
-          website: result.import_ready.website,
-          google_maps_url: `https://www.google.com/maps/place/?q=place_id:${result.place_id}`,
-          address: result.formatted_address || null,
-          rating: result.rating || null,
-          review_count: result.user_ratings_total || null,
-          lead_source: 'Google Maps',
-          running_ads: false,
-          notes: result.import_ready.notes,
-          score: result.opportunity_score >= 90 ? 'A++' : 
-                 result.opportunity_score >= 80 ? 'A+' : 
-                 result.opportunity_score >= 70 ? 'A' : 
-                 result.opportunity_score >= 60 ? 'B' : 'C',
-          import_operation_id: importOperation.id,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-
-        try {
-          const savedLead = await saveLead(newLead);
-          if (savedLead) {
-            addLead(savedLead);
-            successCount++;
-            importedLeadIds.push(savedLead.id);
-          }
-        } catch (error) {
-          console.error('Error saving lead:', error);
-        }
-      }
-    }
-
-    // Update the search result with imported lead IDs
-    if (currentSearchId && importedLeadIds.length > 0) {
-      try {
-        await fetch('/api/search-results/update-imported', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            searchResultId: currentSearchId,
-            importedLeadIds
-          })
-        });
-      } catch (error) {
-        console.error('Error updating imported lead IDs:', error);
-      }
-    }
-
-    // Track import metrics for saturation detection
-    if (marketId && importOperation) {
-      await trackImportMetrics(
-        marketId,
-        1, // Phase 1 for Google Maps
-        importOperation.id,
-        {
-          totalFound: selectedResults.length,
-          duplicates: duplicateCount,
-          imported: successCount,
-          serviceType: serviceType,
-          searchQuery: `${serviceType} in ${city}`
-        }
-      );
-    }
-
-    toast.dismiss(toastId);
-    
-    if (successCount > 0) {
-      // Store the import operation for undo functionality
-      useLeadStore.getState().setLastImportOperation(importOperation);
-      
-      // Show success with undo option
-      toast((t) => (
-        <div className="flex items-center justify-between gap-4">
-          <span>Successfully imported {successCount} new leads!</span>
-          <button
-            onClick={() => {
-              toast.dismiss(t.id);
-              handleUndo();
-            }}
-            className="text-sm font-medium text-blue-600 hover:text-blue-500"
-          >
-            Undo
-          </button>
-        </div>
-      ), {
-        duration: 5000,
-        id: 'google-maps-import-success'
-      });
-      
-      // Refresh leads to show the imported data immediately
-      refreshLeads();
-      
-      // Trigger market coverage update in the background
-      fetch('/api/fix-market-coverage', { method: 'POST' })
-        .then(response => {
-          if (response.ok) {
-            console.log('Market coverage updated after import');
-          }
-        })
-        .catch(error => {
-          console.error('Failed to update market coverage:', error);
-        });
-    } else {
-      toast.error('No leads were imported');
-    }
-    
-    onClose();
-    resetModal();
+    toast.error('Please use the "Import from Apify" option to import leads');
   };
   
   const handleUndo = async () => {
@@ -984,18 +670,78 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                           <p className="text-xs text-gray-400 mb-2">
                             Enter the run ID from your Apify Google Maps Scraper run (e.g., cj0hg4MwJnfX0Qz2C)
                           </p>
-                          <div className="flex gap-1.5">
+                          
+                          {/* Run ID */}
+                          <div className="mb-2">
+                            <label className="block text-xs font-medium text-gray-300 mb-1">
+                              Apify Run ID <span className="text-red-500">*</span>
+                            </label>
                             <input
                               type="text"
                               value={apifyRunId}
                               onChange={(e) => setApifyRunId(e.target.value)}
-                              placeholder="Enter Apify run ID"
-                              className="flex-1 rounded bg-[#1F2937] border-[#374151] text-white text-xs px-2 py-1.5"
+                              placeholder="e.g., cj0hg4MwJnfX0Qz2C"
+                              className={`w-full rounded bg-[#1F2937] border ${
+                                apifyRunId && apifyRunId.includes('/') 
+                                  ? 'border-red-500' 
+                                  : 'border-[#374151]'
+                              } text-white text-xs px-2 py-1.5`}
                               disabled={isImportingApify}
                             />
+                            {apifyRunId && apifyRunId.includes('/') && (
+                              <div className="mt-1 text-xs text-red-500">
+                                ⚠️ This looks like an actor name, not a run ID. 
+                                Please go to your <a 
+                                  href="https://console.apify.com/actors/runs" 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="underline hover:text-red-400"
+                                >
+                                  Apify console
+                                </a> and copy the run ID from a completed run.
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Search Query */}
+                          <div className="mb-2">
+                            <label className="block text-xs font-medium text-gray-300 mb-1">
+                              Search Query <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={serviceType}
+                              onChange={(e) => setServiceType(e.target.value)}
+                              placeholder="e.g., Lawn care in Phoenix, AZ"
+                              className="w-full rounded bg-[#1F2937] border-[#374151] text-white text-xs px-2 py-1.5"
+                              disabled={isImportingApify}
+                            />
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Copy this from searchStringsArray in your Apify input
+                            </p>
+                          </div>
+                          
+                          {/* City */}
+                          <div className="mb-3">
+                            <label className="block text-xs font-medium text-gray-300 mb-1">
+                              City <span className="text-red-500">*</span>
+                            </label>
+                            <USCityAutocomplete
+                              value={city}
+                              onChange={setCity}
+                              placeholder="e.g., Phoenix, AZ"
+                              className="w-full rounded bg-[#1F2937] border-[#374151] text-white text-xs"
+                              disabled={isImportingApify}
+                            />
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Enter the city and state
+                            </p>
+                          </div>
+                          
+                          <div className="flex gap-1.5">
                             <button
                               onClick={handleApifyImport}
-                              disabled={isImportingApify || !apifyRunId.trim()}
+                              disabled={isImportingApify || !apifyRunId.trim() || !serviceType.trim() || !city.trim() || apifyRunId.includes('/')}
                               className="px-3 py-1.5 bg-[#3B82F6] text-white text-xs rounded hover:bg-[#2563EB] disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {isImportingApify ? 'Importing...' : 'Import'}
@@ -1004,18 +750,48 @@ export default function GoogleMapsImportModal({ open, onClose }: GoogleMapsImpor
                               onClick={() => {
                                 setShowApifyImport(false);
                                 setApifyRunId('');
+                                setServiceType('');
+                                setCity('');
                               }}
                               className="px-3 py-1.5 bg-[#374151] text-gray-300 text-xs rounded hover:bg-[#4B5563]"
                             >
                               Cancel
                             </button>
                           </div>
-                          <p className="text-xs text-gray-500 mt-1.5">
-                            💡 Find the run ID in your Apify console under the run details
-                          </p>
+                          
+                          {/* Help text */}
+                          <div className="mt-3 p-2 bg-[#1F2937] rounded text-xs text-gray-400">
+                            <p className="font-medium text-[#60A5FA] mb-1">📍 How to get your Run ID:</p>
+                            <ol className="space-y-0.5 ml-3">
+                              <li>1. Go to <a href="https://console.apify.com/actors/runs" target="_blank" rel="noopener noreferrer" className="text-[#60A5FA] hover:underline">Apify Console → Runs</a></li>
+                              <li>2. Find your Google Maps Scraper run</li>
+                              <li>3. Click on the run to open it</li>
+                              <li>4. Copy the Run ID from the URL or run details</li>
+                              <li>5. It should look like: <code className="bg-[#374151] px-1 rounded">cj0hg4MwJnfX0Qz2C</code></li>
+                            </ol>
+                          </div>
                         </div>
                       )}
 
+                      {/* Import Progress Overlay */}
+                      {isImportingApify && importProgress.status && (
+                        <div className="mt-2 bg-[#1F2937] rounded p-4 border border-[#3B82F6]/30">
+                          <div className="flex items-center gap-3">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#3B82F6]"></div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-white">{importProgress.status}</p>
+                              {importProgress.details && (
+                                <p className="text-xs text-gray-400 mt-0.5">{importProgress.details}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="mt-3 bg-[#111827] rounded p-2">
+                            <p className="text-xs text-gray-400">
+                              This may take a few moments depending on the number of leads...
+                            </p>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Search Form */}
                       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-4">

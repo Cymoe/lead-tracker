@@ -5,7 +5,6 @@ import { useLeadStore } from '@/lib/store';
 import { saveLead } from '@/lib/api';
 import { Lead } from '@/types';
 import toast from 'react-hot-toast';
-import { createImportOperation } from '@/lib/import-operations-api';
 import KeywordAssistant from '../KeywordAssistant';
 import USCityAutocomplete from '../USCityAutocomplete';
 import ServiceTypeDropdown from '../ServiceTypeDropdown';
@@ -245,26 +244,7 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
       return;
     }
     
-    // Create import operation record
-    const importOperation = await createImportOperation(
-      'bulk_import',
-      bulkSource,
-      leadsToProcess.length,
-      {
-        city: bulkCity,
-        service_type: selectedServiceType,
-        import_mode: importMode,
-        ai_extracted: true,
-        duplicates_found: duplicateLeads.length,
-        new_leads_found: preview.length
-      }
-    );
-    
-    if (!importOperation) {
-      toast.error('Failed to create import operation');
-      setIsProcessing(false);
-      return;
-    }
+    // Import operation tracking removed
     
     // Save all leads in parallel (in batches to avoid overwhelming the server)
     const BATCH_SIZE = 10;
@@ -287,11 +267,8 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
             updateCount++;
             return true;
           } else {
-            // Save as new lead with import_operation_id
-            const savedLead = await saveLead({
-              ...lead,
-              import_operation_id: importOperation.id
-            });
+            // Save as new lead
+            const savedLead = await saveLead(lead);
             addLead(savedLead);
             return true;
           }
@@ -317,7 +294,6 @@ export default function BulkImportModal({ open, onClose }: BulkImportModalProps)
       toast.success(`Updated ${updateCount} leads successfully!`);
     } else {
       // Store the import operation for undo functionality
-      useLeadStore.getState().setLastImportOperation(importOperation);
       
       // Show success with undo option
       toast((t) => (

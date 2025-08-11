@@ -199,18 +199,18 @@
   --tw-gradient-to: rgb(59 130 246 / 0.08) !important;
 }
 
-/* Newly imported rows - Subtle success highlight */
+/* Newly imported rows - Subtle blue highlight */
 .dark tr.newly-imported {
-  background-color: rgb(16 185 129 / 0.08) !important; /* very subtle green tint */
-  box-shadow: inset 0 0 0 1px rgb(16 185 129 / 0.3); /* green border */
+  background-color: rgb(59 130 246 / 0.08) !important; /* very subtle blue tint */
+  box-shadow: inset 0 0 0 1px rgb(59 130 246 / 0.3); /* blue border */
 }
 
 .dark .bg-green-50\/70 {
-  background-color: rgb(16 185 129 / 0.08) !important; /* very subtle green tint */
+  background-color: rgb(59 130 246 / 0.08) !important; /* very subtle blue tint */
 }
 
 .dark .ring-green-400 {
-  --tw-ring-color: rgb(16 185 129); /* emerald-500 */
+  --tw-ring-color: rgb(59 130 246); /* blue-500 */
 }
 
 /* Sticky columns background */

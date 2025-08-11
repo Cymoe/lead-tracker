@@ -101,7 +101,9 @@ export function useDeleteLead() {
 export function useRefreshLeads() {
   const queryClient = useQueryClient();
   
-  return () => {
-    queryClient.invalidateQueries({ queryKey: LEADS_QUERY_KEY });
+  return async () => {
+    await queryClient.invalidateQueries({ queryKey: LEADS_QUERY_KEY });
+    // Force refetch and wait for it to complete
+    await queryClient.refetchQueries({ queryKey: LEADS_QUERY_KEY });
   };
 }

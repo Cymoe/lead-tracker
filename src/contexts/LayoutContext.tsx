@@ -21,13 +21,27 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     return false;
   });
   
-  const [isViewsPanelOpen, setIsViewsPanelOpen] = useState(false);
+  // Initialize views panel state from localStorage
+  const [isViewsPanelOpen, setIsViewsPanelOpenState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('viewsPanelOpen');
+      return saved === 'true';
+    }
+    return false;
+  });
 
   const setIsSidebarCollapsed = (collapsed: boolean) => {
     setIsSidebarCollapsedState(collapsed);
     localStorage.setItem('sidebarCollapsed', collapsed.toString());
     // Emit event for other components
     window.dispatchEvent(new Event('sidebarToggled'));
+  };
+
+  const setIsViewsPanelOpen = (open: boolean) => {
+    setIsViewsPanelOpenState(open);
+    localStorage.setItem('viewsPanelOpen', open.toString());
+    // Emit event for other components
+    window.dispatchEvent(new CustomEvent('viewsPanelToggled', { detail: { isOpen: open } }));
   };
 
   // Listen for storage changes from other tabs
@@ -46,10 +60,11 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Listen for views panel toggle
+  // Listen for views panel toggle from AppLayout
   useEffect(() => {
     const handleViewsPanelToggle = (event: CustomEvent) => {
-      setIsViewsPanelOpen(event.detail.isOpen);
+      // Update state but don't save to localStorage again (it's already saved by the setter)
+      setIsViewsPanelOpenState(event.detail.isOpen);
     };
     
     window.addEventListener('viewsPanelToggled', handleViewsPanelToggle as EventListener);

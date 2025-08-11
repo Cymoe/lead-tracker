@@ -35,9 +35,12 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
     
+    // Construct the actual search query that will be used
+    const searchQuery = `${serviceType} in ${city}`;
+    
     // Prepare Apify input
     const apifyInput = {
-      searchStringsArray: [`${serviceType} in ${city}`],
+      searchStringsArray: [searchQuery],
       locationQuery: city,
       ...(maxResults < 9999 && { maxCrawledPlacesPerSearch: maxResults }),
       language: 'en',

@@ -83,7 +83,6 @@ export type Database = {
           notes: string | null
           score: 'A++' | 'A+' | 'A' | 'B' | 'C' | null
           close_crm_id: string | null
-          import_operation_id: string | null
           created_at: string
           updated_at: string
         }
@@ -126,7 +125,6 @@ export type Database = {
           notes?: string | null
           score?: 'A++' | 'A+' | 'A' | 'B' | 'C' | null
           close_crm_id?: string | null
-          import_operation_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -169,7 +167,6 @@ export type Database = {
           notes?: string | null
           score?: 'A++' | 'A+' | 'A' | 'B' | 'C' | null
           close_crm_id?: string | null
-          import_operation_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -253,100 +250,6 @@ export type Database = {
           user_id?: string
           role?: 'owner' | 'admin' | 'member'
           joined_at?: string
-        }
-      }
-      apify_search_results: {
-        Row: {
-          id: string
-          user_id: string
-          search_type: 'google_maps' | 'facebook_ads'
-          search_params: Json
-          results: Json
-          result_count: number
-          search_mode: string | null
-          cost_estimate: Json | null
-          created_at: string
-          expires_at: string
-          apify_run_id: string | null
-          import_status: string | null
-          import_started_at: string | null
-          import_completed_at: string | null
-          leads_imported: number | null
-          import_error: string | null
-          import_operation_id: string | null
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          search_type: 'google_maps' | 'facebook_ads'
-          search_params: Json
-          results: Json
-          result_count: number
-          search_mode?: string | null
-          cost_estimate?: Json | null
-          created_at?: string
-          expires_at: string
-          apify_run_id?: string | null
-          import_status?: string | null
-          import_started_at?: string | null
-          import_completed_at?: string | null
-          leads_imported?: number | null
-          import_error?: string | null
-          import_operation_id?: string | null
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          search_type?: 'google_maps' | 'facebook_ads'
-          search_params?: Json
-          results?: Json
-          result_count?: number
-          search_mode?: string | null
-          cost_estimate?: Json | null
-          created_at?: string
-          expires_at?: string
-          apify_run_id?: string | null
-          import_status?: string | null
-          import_started_at?: string | null
-          import_completed_at?: string | null
-          leads_imported?: number | null
-          import_error?: string | null
-          import_operation_id?: string | null
-        }
-      }
-      import_operations: {
-        Row: {
-          id: string
-          user_id: string
-          operation_type: 'bulk_import' | 'csv_import' | 'google_maps_import' | 'manual_add'
-          source: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | 'CSV Import'
-          lead_count: number
-          metadata: Json
-          created_at: string
-          reverted_at: string | null
-          reverted_by: string | null
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          operation_type: 'bulk_import' | 'csv_import' | 'google_maps_import' | 'manual_add'
-          source: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | 'CSV Import'
-          lead_count?: number
-          metadata?: Json
-          created_at?: string
-          reverted_at?: string | null
-          reverted_by?: string | null
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          operation_type?: 'bulk_import' | 'csv_import' | 'google_maps_import' | 'manual_add'
-          source?: 'FB Ad Library' | 'Instagram Manual' | 'Google Maps' | 'CSV Import'
-          lead_count?: number
-          metadata?: Json
-          created_at?: string
-          reverted_at?: string | null
-          reverted_by?: string | null
         }
       }
     }

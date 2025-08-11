@@ -24,7 +24,8 @@ import GoogleMapsImportModal from '@/components/modals/GoogleMapsImportModal';
 import GroupedColumnDropdown from '@/components/GroupedColumnDropdown';
 import LoadingScreen from '@/components/LoadingScreen';
 import DebugLeadSources from '@/components/DebugLeadSources';
-import UndoNotification from '@/components/UndoNotification';
+import ImportStatusIndicator from '@/components/ImportStatusIndicator';
+// import SearchQueryDebug from '@/components/SearchQueryDebug'; // No longer needed - auto-fix handles this
 
 import { useLeadsQuery, useRefreshLeads } from '@/hooks/useLeadsQuery';
 import { exportToGoogleSheets, exportToCSV } from '@/utils/export';
@@ -160,6 +161,7 @@ export default function LeadsPage() {
   const { isLoading: isLoadingLeads, error: loadError } = useLeadsQuery();
   const refreshLeads = useRefreshLeads();
   
+  
   // Update total count when leads change
   const totalLeadCount = leads.length;
       
@@ -235,50 +237,26 @@ export default function LeadsPage() {
 
   // Filter leads based on all active filters and current market
   const filteredLeads = leads.filter((lead) => {
+    // Debug filtering
+    if (lead.city?.toLowerCase().includes('scottsdale')) {
+      console.log('Scottsdale lead found:', {
+        company: lead.company_name,
+        city: lead.city,
+        state: lead.state,
+        search_query: lead.search_query,
+        currentMarket: currentMarket?.id,
+        willBeFiltered: currentMarket && currentMarket.id !== 'all'
+      });
+    }
+    
     // Dynamic market filter
     if (currentMarket && currentMarket.id !== 'all') {
       if (currentMarket.id === 'unassigned') {
-        // Show only leads that can't be assigned to any market
-        // Check if we can detect state or city from any method
-        let detectedState = normalizeState(lead.state);
-        let detectedCity = lead.city || '';
-        
-        // Extract city from company name if not already set
-        if (!detectedCity && lead.company_name) {
-          // Common patterns: "Company - City" or "Company in City"
-          const dashMatch = lead.company_name.match(/\s*-\s*([A-Za-z\s]+?)$/);
-          const inMatch = lead.company_name.match(/\sin\s+([A-Za-z\s]+?)$/i);
-          const potentialCity = dashMatch?.[1] || inMatch?.[1];
-          
-          if (potentialCity) {
-            const trimmedCity = potentialCity.trim();
-            // Check if this is a known city
-            const detectedMetro = detectMetroArea(trimmedCity, '');
-            if (detectedMetro) {
-              detectedCity = trimmedCity;
-              if (!detectedState) {
-                detectedState = detectedMetro.state;
-              }
-            }
-          }
-        }
-        
-        if (!detectedState && detectedCity) {
-          const detectedMetro = detectMetroArea(detectedCity, '');
-          if (detectedMetro) detectedState = detectedMetro.state;
-        }
-        
-        if (lead.phone) {
-          if (!detectedState) {
-            detectedState = getStateFromPhone(lead.phone) || '';
-          }
-          if (!detectedCity) {
-            detectedCity = getCityFromPhone(lead.phone) || '';
-          }
-        }
-        
-        // Only show in unassigned if we can't detect any location by any method
-        return !detectedCity && !detectedState;
+        // Show only leads with no city AND no state in the database
+        // This matches the logic in ViewsSidebar
+        const hasCity = lead.city && lead.city.trim() !== '';
+        const hasState = lead.state && lead.state.trim() !== '';
+        return !hasCity && !hasState;
       } else if (currentMarket.id.startsWith('category-')) {
         // Category filter
         const categoryId = currentMarket.id.replace('category-', '');
@@ -291,9 +269,22 @@ export default function LeadsPage() {
         const normalizedLeadType = lead.service_type ? normalizeServiceType(lead.service_type) : null;
         return normalizedLeadType === serviceType;
       } else if (currentMarket.id.startsWith('query-')) {
-        // Search query filter
+        // Search query filter - match by exact search query
         const searchQueryValue = currentMarket.id.replace('query-', '');
-        return lead.search_query === searchQueryValue;
+        const matches = lead.search_query === searchQueryValue;
+        
+        // Debug missing leads
+        if (lead.search_query === searchQueryValue && (!lead.city || !lead.state)) {
+          console.log('Lead with matching query but missing location:', {
+            company: lead.company_name,
+            search_query: lead.search_query,
+            city: lead.city,
+            state: lead.state,
+            source: lead.lead_source
+          });
+        }
+        
+        return matches;
       } else if (currentMarket.type === 'state') {
         // Check if lead belongs to this state
         let leadState = normalizeState(lead.state);
@@ -462,6 +453,16 @@ export default function LeadsPage() {
                     <span className="font-semibold text-gray-900 dark:text-gray-100">Leads</span>
                     <span className="text-sm text-gray-500 dark:text-gray-400">{filteredLeads.length}</span>
                   </div>
+                )}
+                
+                {/* Show all leads button if filter is active */}
+                {currentMarket && currentMarket.id !== 'all' && (
+                  <button
+                    onClick={() => setCurrentMarket({ id: 'all', name: 'All Markets', type: 'all', leadCount: leads.length })}
+                    className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                  >
+                    Show All ({leads.length})
+                  </button>
                 )}
                 
                 {/* Filters */}
@@ -691,8 +692,10 @@ export default function LeadsPage() {
         onClose={() => setShowGoogleMapsImport(false)} 
       />
       
+      {/* Import Status Indicator */}
+      <ImportStatusIndicator />
+      
       {/* Undo notification */}
-      <UndoNotification />
     </>
   );
 }

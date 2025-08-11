@@ -41,7 +41,6 @@ export function dbToAppLead(dbLead: DbLead): Lead {
     notes: dbLead.notes,
     score: dbLead.score,
     close_crm_id: dbLead.close_crm_id,
-    import_operation_id: dbLead.import_operation_id,
     created_at: dbLead.created_at,
     updated_at: dbLead.updated_at,
   };
@@ -55,9 +54,9 @@ function appToDbLead(lead: Partial<Lead>, userId: string): DbLeadInsert {
     company_name: lead.company_name!,
     service_type: lead.service_type || null,
     // Don't save normalized_service_type to database - calculate on the fly
-    // Don't convert empty strings to null for city/state - preserve the value
-    city: lead.city === '' ? null : (lead.city || null),
-    state: lead.state === '' ? null : (lead.state || null),
+    // Preserve city/state values - only convert falsy values to null
+    city: lead.city || null,
+    state: lead.state || null,
     phone: lead.phone || null,
     email: lead.email || null,
     email2: lead.email2 || null,
@@ -81,7 +80,6 @@ function appToDbLead(lead: Partial<Lead>, userId: string): DbLeadInsert {
     notes: lead.notes || null,
     score: lead.score || null,
     close_crm_id: lead.close_crm_id || null,
-    import_operation_id: lead.import_operation_id || null,
   };
 }
 
@@ -223,8 +221,30 @@ export async function saveLead(lead: Partial<Lead>, supabase?: any, userId?: str
   }
   
   console.log('Using userId in saveLead:', user_id);
+  
+  // Validate critical fields
+  if (!lead.city || !lead.state) {
+    console.warn('WARNING: Saving lead without city/state!', {
+      company_name: lead.company_name,
+      city: lead.city,
+      state: lead.state,
+      cityType: typeof lead.city,
+      stateType: typeof lead.state
+    });
+  }
 
   const dbLead = appToDbLead(lead, user_id);
+  
+  // Debug log the final database values
+  if (!dbLead.city || !dbLead.state) {
+    console.error('CRITICAL: dbLead missing location after conversion!', {
+      company_name: dbLead.company_name,
+      city: dbLead.city,
+      state: dbLead.state,
+      originalCity: lead.city,
+      originalState: lead.state
+    });
+  }
 
   const { data, error } = await supabase
     .from('leads')
@@ -238,20 +258,56 @@ export async function saveLead(lead: Partial<Lead>, supabase?: any, userId?: str
 }
 
 // Save multiple leads at once (batch insert)
-export async function saveLeadsBatch(leads: Partial<Lead>[]): Promise<Lead[]> {
-  const supabase = createClient();
+export async function saveLeadsBatch(leads: Partial<Lead>[], supabase?: any, userId?: string): Promise<Lead[]> {
+  // If supabase client is not provided, create one (for client-side usage)
+  if (!supabase) {
+    supabase = createClient();
+  }
   
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  // If userId is not provided, get it from auth (for client-side usage)
+  let user_id = userId;
+  if (!user_id) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+    user_id = user.id;
+  }
 
-  const dbLeads = leads.map(lead => appToDbLead(lead, user.id));
+  const dbLeads = leads.map(lead => appToDbLead(lead, user_id));
 
+  // Use upsert with onConflict to handle duplicates gracefully
+  // This will update existing leads with the same google_maps_url
   const { data, error } = await supabase
     .from('leads')
-    .insert(dbLeads)
+    .upsert(dbLeads, { 
+      onConflict: 'user_id,google_maps_url',
+      ignoreDuplicates: false  // Update existing records
+    })
     .select();
 
-  if (error) throw error;
+  if (error) {
+    console.error('Batch save error:', error);
+    // Try to save leads one by one to identify which ones are failing
+    const savedLeads = [];
+    for (const dbLead of dbLeads) {
+      try {
+        const { data: singleData } = await supabase
+          .from('leads')
+          .upsert(dbLead, { 
+            onConflict: 'user_id,google_maps_url',
+            ignoreDuplicates: false
+          })
+          .select()
+          .single();
+        
+        if (singleData) {
+          savedLeads.push(dbToAppLead(singleData));
+        }
+      } catch (singleError) {
+        console.error('Failed to save lead:', dbLead.company_name, singleError);
+      }
+    }
+    return savedLeads;
+  }
   
   return (data || []).map(dbToAppLead);
 }

@@ -7,7 +7,6 @@ import toast from 'react-hot-toast';
 import EditLeadModal from './modals/EditLeadModal';
 import BulkEditModal from './modals/BulkEditModal';
 import AdViewerModal from './modals/AdViewerModal';
-import ImportHistoryModal from './modals/ImportHistoryModal';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useTableKeyboardNavigation } from '@/hooks/useTableKeyboardNavigation';
 import { getCategoryForBusiness } from '@/utils/grey-tsunami-business-types';
@@ -136,7 +135,6 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
   const [showAdViewerModal, setShowAdViewerModal] = useState(false);
   const [adViewerLead, setAdViewerLead] = useState<Lead | null>(null);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [showImportHistoryModal, setShowImportHistoryModal] = useState(false);
   const tableRef = useRef<HTMLTableElement>(null);
   const { focusedCell, isEditing } = useTableKeyboardNavigation(tableRef);
 
@@ -388,7 +386,7 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
   if (isMobile && viewMode === 'grid') {
     return (
       <>
-        <div className="bg-gray-50 min-h-screen">
+        <div className="bg-gray-50 dark:bg-gray-900 min-h-screen">
           {/* Bulk operations bar for mobile - Disabled */}
           {/* <BulkOperationsBar
             selectedCount={storeSelectedLeads.length}
@@ -400,13 +398,13 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
           {/* Mobile cards */}
           <div className="px-4 py-4">
             {storeSelectedLeads.length > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 mb-4 flex items-center justify-between">
-                <span className="text-sm text-blue-700">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2 mb-4 flex items-center justify-between">
+                <span className="text-sm text-blue-700 dark:text-blue-300">
                   {storeSelectedLeads.length} selected
                 </span>
                 <button
                   onClick={() => setSelectedLeads([])}
-                  className="text-sm text-blue-600 hover:text-blue-800"
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
                 >
                   Clear
                 </button>
@@ -468,21 +466,21 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
   // Table view (Desktop and Mobile when selected)
   return (
     <>
-      <div className={`bg-white shadow-sm relative z-0 overflow-hidden mr-4 ${isMobile ? 'mobile-table' : ''}`}>
+      <div className={`bg-white dark:bg-gray-900 shadow-sm relative z-0 overflow-hidden mr-4 ${isMobile ? 'mobile-table' : ''}`}>
         {/* New imports filter banner */}
         {showOnlyNewImports && newlyImportedLeads.length > 0 && (
-          <div className="bg-green-50 border-b border-green-200 px-4 py-3 flex items-center justify-between">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 px-4 py-3 flex items-center justify-between">
             <div className="flex items-center">
-              <svg className="h-5 w-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
               </svg>
-              <span className="text-sm font-medium text-green-800">
+              <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
                 Showing {newlyImportedLeads.length} newly imported lead{newlyImportedLeads.length !== 1 ? 's' : ''}
               </span>
             </div>
             <button
               onClick={() => setShowOnlyNewImports(false)}
-              className="text-sm text-green-600 hover:text-green-800 font-medium"
+              className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
             >
               Clear Filter
             </button>
@@ -498,14 +496,14 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
         /> */}
         
         {storeSelectedLeads.length > 0 && false && (
-          <div className="bg-gray-50 px-3 py-2 flex items-center justify-between">
-            <span className="text-xs text-gray-700">
+          <div className="bg-gray-50 dark:bg-gray-800 px-3 py-2 flex items-center justify-between">
+            <span className="text-xs text-gray-700 dark:text-gray-300">
               {storeSelectedLeads.length} lead{storeSelectedLeads.length !== 1 ? 's' : ''} selected
             </span>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowBulkEditModal(true)}
-                className="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-white bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 title="Edit selected leads (⌘+E or Ctrl+E)"
               >
                 <PencilSquareIcon className="h-4 w-4 mr-1" />
@@ -525,13 +523,13 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
         )}
         
         <div className="overflow-x-auto overflow-y-auto relative" style={{ height: 'calc(100vh - 120px)' }}>
-          <table ref={tableRef} className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50 sticky top-0 z-50 shadow-sm">
+          <table ref={tableRef} className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-50 shadow-sm">
               <tr>
-                <th className="px-1 py-2 text-center text-xs font-medium text-gray-400 uppercase tracking-wide sticky left-0 z-10 bg-gray-50 border-r border-gray-200 w-10">
+                <th className="px-1 py-2 text-center text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 w-10">
                   #
                 </th>
-                <th className="px-2 sm:px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide sticky left-[40px] z-10 bg-gray-50 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 min-w-[44px]">
+                <th className="px-2 sm:px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide sticky left-[40px] z-10 bg-gray-50 dark:bg-gray-800 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 dark:border-gray-700 min-w-[44px]">
                   <input
                     type="checkbox"
                     checked={storeSelectedLeads.length === sortedLeads.length && sortedLeads.length > 0}
@@ -541,7 +539,7 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                 </th>
                 {activeColumns.company && (
                                 <th
-                className={`px-2 sm:px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100 sticky z-10 bg-gray-50 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 w-[320px] min-w-[320px] max-w-[320px]`}
+                className={`px-2 sm:px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 sticky z-10 bg-gray-50 dark:bg-gray-800 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 dark:border-gray-700 w-[320px] min-w-[320px] max-w-[320px]`}
                 style={{ left: 'calc(40px + 44px)' }}
               >
                 <div className="flex items-center gap-1" onClick={() => handleSort('company_name')}>
@@ -555,13 +553,13 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
               </th>
                 )}
                 {activeColumns.links && (
-                  <th className={`px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide w-[100px] min-w-[100px] ${isMobile ? 'hide-on-mobile' : ''}`}>
+                  <th className={`pl-6 pr-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide w-[120px] min-w-[120px] ${isMobile ? 'hide-on-mobile' : ''}`}>
                     Links
                   </th>
                 )}
                 {activeColumns.city && (
                   <th 
-                    className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100"
+                    className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                     onClick={() => handleSort('city')}
                   >
                     <div className="flex items-center gap-1">
@@ -575,68 +573,68 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                   </th>
                 )}
                 {activeColumns.state && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     State
                   </th>
                 )}
                 {activeColumns.phone && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     Phone
                   </th>
                 )}
                 {activeColumns.email && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     Email
                   </th>
                 )}
                 {activeColumns.handle && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     Handle
                   </th>
                 )}
                 {activeColumns.additionalEmails && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     Additional Emails
                   </th>
                 )}
                 {activeColumns.address && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     Address
                   </th>
                 )}
                 {activeColumns.rating && (
-                  <th className={`px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide ${isMobile ? 'hide-on-mobile' : ''}`}>
+                  <th className={`px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide ${isMobile ? 'hide-on-mobile' : ''}`}>
                     Rating
                   </th>
                 )}
                 {activeColumns.reviewCount && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     Reviews
                   </th>
                 )}
                 {activeColumns.score && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     Score
                   </th>
                 )}
                 {activeColumns.source && (
-                  <th className={`px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide ${isMobile ? 'hide-on-mobile' : ''}`}>
+                  <th className={`px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide ${isMobile ? 'hide-on-mobile' : ''}`}>
                     Source
                   </th>
                 )}
                 {activeColumns.ads && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     Ads
                   </th>
                 )}
                 {activeColumns.adPlatforms && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     Ad Platforms
                   </th>
                 )}
                 {activeColumns.type && (
                   <th 
-                    className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100"
+                    className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                     onClick={() => handleSort('service_type')}
                   >
                     <div className="flex items-center gap-1">
@@ -651,7 +649,7 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                 )}
                 {activeColumns.searchQuery && (
                   <th 
-                    className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide cursor-pointer hover:bg-gray-100"
+                    className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                     onClick={() => handleSort('search_query')}
                   >
                     <div className="flex items-center gap-1">
@@ -665,18 +663,18 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
                   </th>
                 )}
                 {activeColumns.close && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     Close
                   </th>
                 )}
                 {activeColumns.actions && (
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
                     Actions
                   </th>
                 )}
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
               {sortedLeads.map((lead, index) => (
                 <LeadRow 
                   key={lead.id} 
@@ -733,13 +731,8 @@ export default function LeadTable({ visibleColumns, setVisibleColumns, isHeaderC
         onAddLead={() => {}}
         onBulkEdit={() => setShowBulkEditModal(true)}
         onExport={() => {}}
-        onShowImportHistory={() => setShowImportHistoryModal(true)}
       />
       
-      <ImportHistoryModal
-        open={showImportHistoryModal}
-        onClose={() => setShowImportHistoryModal(false)}
-      />
     </>
   );
 }
@@ -790,11 +783,11 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
     if (hasMultipleSources) {
       return (
         <div className="flex items-center gap-1">
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-blue-100 to-purple-100 text-purple-800 border border-purple-200">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-blue-100 dark:from-blue-900/30 to-purple-100 dark:to-purple-900/30 text-purple-800 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
             <span className="mr-1">🔗</span>
             Multi-Source
           </span>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             ({lead.lead_source}{lead.running_ads ? ' + FB Ads' : ''})
           </div>
         </div>
@@ -803,14 +796,34 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
     
     // Enhanced source badges with icons
     const sourceBadges = {
-      'Google Maps': { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-200', icon: '📍' },
-      'FB Ad Library': { bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-200', icon: '📘' },
-      'Instagram Manual': { bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-200', icon: '📷' },
-      'CSV Import': { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200', icon: '📄' }
+      'Google Maps': { 
+        bg: 'bg-blue-100 dark:bg-blue-900/30', 
+        text: 'text-blue-800 dark:text-blue-400', 
+        border: 'border-blue-200 dark:border-blue-800', 
+        icon: '📍' 
+      },
+      'FB Ad Library': { 
+        bg: 'bg-indigo-100 dark:bg-indigo-900/30', 
+        text: 'text-indigo-800 dark:text-indigo-400', 
+        border: 'border-indigo-200 dark:border-indigo-800', 
+        icon: '📘' 
+      },
+      'Instagram Manual': { 
+        bg: 'bg-purple-100 dark:bg-purple-900/30', 
+        text: 'text-purple-800 dark:text-purple-400', 
+        border: 'border-purple-200 dark:border-purple-800', 
+        icon: '📷' 
+      },
+      'CSV Import': { 
+        bg: 'bg-green-100 dark:bg-green-900/30', 
+        text: 'text-green-800 dark:text-green-400', 
+        border: 'border-green-200 dark:border-green-800', 
+        icon: '📄' 
+      }
     };
     
     const badge = sourceBadges[lead.lead_source as keyof typeof sourceBadges];
-    if (!badge) return <span className="text-gray-500">{lead.lead_source || '-'}</span>;
+    if (!badge) return <span className="text-gray-500 dark:text-gray-400">{lead.lead_source || '-'}</span>;
     
     return (
       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${badge.bg} ${badge.text} border ${badge.border}`}>
@@ -825,17 +838,17 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
     return (
       <div className="max-w-[250px]">
         <div className="flex items-center gap-2">
-          <div className="text-sm font-medium text-gray-900 truncate" title={lead.company_name || undefined}>
+          <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate" title={lead.company_name || undefined}>
             {lead.company_name}
           </div>
           {isNewlyImported && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-500 text-white animate-pulse">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-500/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 border border-blue-200/30 dark:border-blue-400/20">
               NEW
             </span>
           )}
         </div>
         {hasMultipleSources && (
-          <div className="text-xs text-gray-500 mt-0.5 truncate">
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
             ⭐ Found in multiple platforms
           </div>
         )}
@@ -849,22 +862,22 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
       data-lead-id={lead.id}
       className={`
         group transition-all duration-150 cursor-pointer relative
-        ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}
-        ${hasMultipleSources ? 'bg-gradient-to-r from-blue-50/30 to-purple-50/30' : ''}
-        hover:bg-blue-50 hover:shadow-sm
-        ${selected ? 'bg-blue-100 hover:bg-blue-200' : ''}
-        ${isNewlyImported ? 'newly-imported bg-green-50/70 ring-2 ring-green-400' : ''}
+        ${index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50/50 dark:bg-gray-800/50'}
+        ${hasMultipleSources ? 'bg-gradient-to-r from-blue-50/20 dark:from-blue-900/20 to-purple-50/20 dark:to-purple-900/20' : ''}
+        hover:bg-blue-50 dark:hover:bg-gray-800 hover:shadow-sm
+        ${selected ? 'bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50' : ''}
+        ${isNewlyImported ? 'newly-imported border-l-4 border-blue-500 dark:border-blue-400' : ''}
       `}
       style={style}>
-      <td className={`px-1 py-2 text-center text-xs text-gray-400 sticky left-0 z-10 border-r border-gray-200 transition-colors duration-150 w-10
-        ${selected ? 'bg-blue-100' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-        group-hover:bg-blue-50 ${selected ? 'group-hover:bg-blue-200' : ''}
+      <td className={`px-1 py-2 text-center text-xs text-gray-400 dark:text-gray-500 sticky left-0 z-10 border-r border-gray-200 dark:border-gray-700 transition-colors duration-150 w-10
+        ${selected ? 'bg-blue-100 dark:bg-blue-900/30' : index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}
+        group-hover:bg-blue-50 dark:group-hover:bg-gray-800 ${selected ? 'group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50' : ''}
       `}>
         {index + 1}
       </td>
-      <td className={`px-2 sm:px-3 py-2 whitespace-nowrap sticky left-[40px] z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 transition-colors duration-150 min-w-[44px]
-        ${selected ? 'bg-blue-100' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-        group-hover:bg-blue-50 ${selected ? 'group-hover:bg-blue-200' : ''}
+      <td className={`px-2 sm:px-3 py-2 whitespace-nowrap sticky left-[40px] z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 dark:border-gray-700 transition-colors duration-150 min-w-[44px]
+        ${selected ? 'bg-blue-100 dark:bg-blue-900/30' : index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}
+        group-hover:bg-blue-50 dark:group-hover:bg-gray-800 ${selected ? 'group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50' : ''}
       `}>
         <input
           type="checkbox"
@@ -875,9 +888,9 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
         />
       </td>
       {activeColumns.company && (
-                    <td className={`px-2 sm:px-3 py-2 cursor-pointer sticky z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 transition-colors duration-150 w-[320px] min-w-[320px] max-w-[320px]
-              ${selected ? 'bg-blue-100' : hasMultipleSources ? 'bg-gradient-to-r from-blue-50 to-purple-50' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-              group-hover:bg-blue-50 ${selected ? 'group-hover:bg-blue-200' : ''}
+                    <td className={`px-2 sm:px-3 py-2 cursor-pointer sticky z-10 shadow-[4px_0_6px_-1px_rgba(0,0,0,0.2)] border-r border-gray-200 dark:border-gray-700 transition-colors duration-150 w-[320px] min-w-[320px] max-w-[320px]
+              ${selected ? 'bg-blue-100 dark:bg-blue-900/30' : hasMultipleSources ? 'bg-gradient-to-r from-blue-50/20 dark:from-blue-900/20 to-purple-50/20 dark:to-purple-900/20' : index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}
+              group-hover:bg-blue-50 dark:group-hover:bg-gray-800 ${selected ? 'group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50' : ''}
             `}
             style={{ left: 'calc(40px + 44px)' }}
             onClick={onEdit}>
@@ -885,38 +898,38 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
             </td>
       )}
       {activeColumns.links && (
-        <td className={`px-2 py-2 whitespace-nowrap text-sm w-[100px] min-w-[100px]
-          ${selected ? 'bg-blue-100' : hasMultipleSources ? 'bg-gradient-to-r from-blue-50 to-purple-50' : index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}
-          group-hover:bg-blue-50 ${selected ? 'group-hover:bg-blue-200' : ''}
+        <td className={`pl-6 pr-2 py-2 whitespace-nowrap text-sm w-[120px] min-w-[120px]
+          ${selected ? 'bg-blue-100 dark:bg-blue-900/30' : hasMultipleSources ? 'bg-gradient-to-r from-blue-50/20 dark:from-blue-900/20 to-purple-50/20 dark:to-purple-900/20' : index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800/50'}
+          group-hover:bg-blue-50 dark:group-hover:bg-gray-800 ${selected ? 'group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50' : ''}
         `}>
           <div className="flex gap-1 flex-wrap justify-start">
             {lead.instagram_url && (
-              <a href={lead.instagram_url} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:text-pink-800" title="Instagram" onClick={(e) => e.stopPropagation()}>
+              <a href={lead.instagram_url} target="_blank" rel="noopener noreferrer" className="text-pink-600 dark:text-pink-400 hover:text-pink-800 dark:hover:text-pink-300" title="Instagram" onClick={(e) => e.stopPropagation()}>
                 📸
               </a>
             )}
             {lead.facebook_url && (
-              <a href={lead.facebook_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800" title="Facebook" onClick={(e) => e.stopPropagation()}>
+              <a href={lead.facebook_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300" title="Facebook" onClick={(e) => e.stopPropagation()}>
                 f
               </a>
             )}
             {lead.linkedin_url && (
-              <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:text-blue-900" title="LinkedIn" onClick={(e) => e.stopPropagation()}>
+              <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-700 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300" title="LinkedIn" onClick={(e) => e.stopPropagation()}>
                 in
               </a>
             )}
             {lead.twitter_url && (
-              <a href={lead.twitter_url} target="_blank" rel="noopener noreferrer" className="text-sky-500 hover:text-sky-700" title="Twitter/X" onClick={(e) => e.stopPropagation()}>
+              <a href={lead.twitter_url} target="_blank" rel="noopener noreferrer" className="text-sky-500 dark:text-sky-400 hover:text-sky-700 dark:hover:text-sky-300" title="Twitter/X" onClick={(e) => e.stopPropagation()}>
                 𝕏
               </a>
             )}
             {lead.website && (
-              <a href={ensureProtocol(lead.website) || undefined} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800" title="Website" onClick={(e) => e.stopPropagation()}>
+              <a href={ensureProtocol(lead.website) || undefined} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300" title="Website" onClick={(e) => e.stopPropagation()}>
                 🌐
               </a>
             )}
             {lead.google_maps_url && (
-              <a href={lead.google_maps_url} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-800" title="Google Maps" onClick={(e) => e.stopPropagation()}>
+              <a href={lead.google_maps_url} target="_blank" rel="noopener noreferrer" className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300" title="Google Maps" onClick={(e) => e.stopPropagation()}>
                 📍
               </a>
             )}
@@ -924,7 +937,7 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
         </td>
       )}
             {activeColumns.city && (
-        <td className="px-3 py-2 text-xs text-gray-500 cursor-pointer"
+        <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer"
             onClick={onEdit}>
           <div className="max-w-[150px] truncate" title={lead.city || undefined}>
             {lead.city}
@@ -932,14 +945,14 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
         </td>
       )}
       {activeColumns.state && (
-        <td className="px-3 py-2 text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
+        <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer" onClick={onEdit}>
           <div className="max-w-[50px] truncate" title={lead.state || undefined}>
             {lead.state || '-'}
           </div>
         </td>
       )}
       {activeColumns.phone && (
-        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
+        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
           <InlineEditableCell
             lead={lead}
             field="phone"
@@ -951,7 +964,7 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
         </td>
       )}
       {activeColumns.email && (
-        <td className="px-3 py-2 text-xs text-gray-500">
+        <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
           <InlineEditableCell
             lead={lead}
             field="email"
@@ -962,14 +975,14 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
             placeholder="Add email..."
           />
           {(lead.email2 || lead.email3) && (
-            <span className="text-gray-400 text-xs ml-1">
+            <span className="text-gray-400 dark:text-gray-500 text-xs ml-1">
               +{[lead.email2, lead.email3].filter(Boolean).length} more
             </span>
           )}
         </td>
       )}
       {activeColumns.handle && (
-        <td className="px-3 py-2 text-xs text-gray-900">
+        <td className="px-3 py-2 text-xs text-gray-900 dark:text-gray-100">
           <InlineEditableCell
             lead={lead}
             field="handle"
@@ -981,7 +994,7 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
         </td>
       )}
       {activeColumns.additionalEmails && (
-        <td className="px-3 py-2 text-xs text-gray-500">
+        <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
           <div className="space-y-1">
             {lead.email2 && (
               <InlineEditableCell
@@ -1006,13 +1019,13 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
               />
             )}
             {!lead.email2 && !lead.email3 && (
-              <span className="text-gray-400">-</span>
+              <span className="text-gray-400 dark:text-gray-500">-</span>
             )}
           </div>
         </td>
       )}
       {activeColumns.address && (
-        <td className="px-3 py-2 text-xs text-gray-500">
+        <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
           <InlineEditableCell
             lead={lead}
             field="address"
@@ -1024,23 +1037,23 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
         </td>
       )}
       {activeColumns.rating && (
-        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
+        <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 cursor-pointer" onClick={onEdit}>
           {lead.rating ? (
             <div className="flex items-center">
               <span>{lead.rating}</span>
               <span className="text-yellow-500 ml-1">⭐</span>
             </div>
           ) : (
-            <span className="text-gray-400">-</span>
+            <span className="text-gray-400 dark:text-gray-500">-</span>
           )}
         </td>
       )}
       {activeColumns.reviewCount && (
-        <td className="px-3 py-2 text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
+        <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer" onClick={onEdit}>
           {lead.review_count !== null && lead.review_count !== undefined ? (
             <span>{lead.review_count}</span>
           ) : (
-            <span className="text-gray-400">-</span>
+            <span className="text-gray-400 dark:text-gray-500">-</span>
           )}
         </td>
       )}
@@ -1048,21 +1061,21 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
         <td className="px-3 py-2 text-xs cursor-pointer" onClick={onEdit}>
           {lead.score ? (
             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-              lead.score === 'A++' ? 'bg-green-100 text-green-800' :
-              lead.score === 'A+' ? 'bg-green-100 text-green-800' :
-              lead.score === 'A' ? 'bg-blue-100 text-blue-800' :
-              lead.score === 'B' ? 'bg-yellow-100 text-yellow-800' :
-              'bg-gray-100 text-gray-800'
+              lead.score === 'A++' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' :
+              lead.score === 'A+' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' :
+              lead.score === 'A' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400' :
+              lead.score === 'B' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400' :
+              'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300'
             }`}>
               {lead.score}
             </span>
           ) : (
-            <span className="text-gray-400">-</span>
+            <span className="text-gray-400 dark:text-gray-500">-</span>
           )}
         </td>
       )}
       {activeColumns.source && (
-        <td className={`px-3 py-2 whitespace-nowrap text-xs text-gray-500 cursor-pointer ${isMobile ? 'hide-on-mobile' : ''}`} onClick={onEdit}>
+        <td className={`px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400 cursor-pointer ${isMobile ? 'hide-on-mobile' : ''}`} onClick={onEdit}>
           {getSourceBadge()}
         </td>
       )}
@@ -1082,7 +1095,7 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
         </td>
       )}
       {activeColumns.type && (
-        <td className={`px-3 py-2 text-xs text-gray-500 cursor-pointer ${!activeColumns.handle ? 'pl-6' : ''}`} onClick={onEdit}>
+        <td className={`px-3 py-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer ${!activeColumns.handle ? 'pl-6' : ''}`} onClick={onEdit}>
           <div className="relative group max-w-[180px]">
             <span className="truncate block" title={(lead.normalized_service_type || lead.service_type) || undefined}>
               {lead.normalized_service_type || lead.service_type}
@@ -1105,7 +1118,7 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
         </td>
       )}
       {activeColumns.searchQuery && (
-        <td className="px-3 py-2 text-xs text-gray-500 cursor-pointer" onClick={onEdit}>
+        <td className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer" onClick={onEdit}>
           <div className="max-w-[200px] truncate" title={lead.search_query || undefined}>
             {lead.search_query || '-'}
           </div>
@@ -1116,7 +1129,7 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
           {lead.close_crm_id ? (
             <span className="text-green-600" title={`Exported: ${lead.close_crm_id}`}>✓</span>
           ) : (
-            <span className="text-gray-400">-</span>
+            <span className="text-gray-400 dark:text-gray-500">-</span>
           )}
         </td>
       )}
@@ -1126,7 +1139,7 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
             <div>
               <Menu.Button 
                 onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-full text-gray-400 dark:text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 <EllipsisVerticalIcon className="h-5 w-5" />
               </Menu.Button>
@@ -1151,7 +1164,7 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
                         }}
                         data-action="edit"
                         className={`${
-                          active ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
+                          active ? 'bg-gray-100 text-gray-900 dark:text-gray-100' : 'text-gray-700'
                         } group flex items-center px-4 py-2 text-sm w-full text-left`}
                       >
                         <PencilSquareIcon className="mr-3 h-4 w-4" />
@@ -1168,7 +1181,7 @@ export function LeadRow({ lead, selected, index, isNewlyImported = false, active
                           onDelete();
                         }}
                         className={`${
-                          active ? 'bg-red-50 text-red-900' : 'text-red-700'
+                          active ? 'bg-red-50 dark:bg-red-900/30 text-red-900 dark:text-red-300' : 'text-red-700 dark:text-red-400'
                         } group flex items-center px-4 py-2 text-sm w-full text-left`}
                       >
                         <TrashIcon className="mr-3 h-4 w-4" />

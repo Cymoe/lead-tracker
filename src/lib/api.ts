@@ -1,5 +1,6 @@
 import { Lead } from '@/types';
 import { createClient } from './supabase/client';
+import { cleanupLeadNotes } from '@/utils/lead-notes-generator';
 
 // Re-export all functions from supabase-api
 export { fetchLeads, fetchLeadsPaginated, saveLead, saveLeadsBatch, updateLead, updateLeads, updateLeadsBatch, deleteLead, deleteLeads, extractWithAI, extractWithAIStream } from './supabase-api';
@@ -54,6 +55,11 @@ export async function mergeLeadData(existingLead: Lead, newData: Partial<Lead>):
     mergedData.notes = mergedData.notes 
       ? `${mergedData.notes}\n\n🔗 Multi-source lead: Found in both ${existingLead.lead_source} and ${newData.lead_source}`
       : `🔗 Multi-source lead: Found in both ${existingLead.lead_source} and ${newData.lead_source}`;
+  }
+
+  // Clean up any inconsistencies in the merged notes
+  if (mergedData.notes) {
+    mergedData.notes = cleanupLeadNotes(mergedData.notes, mergedData);
   }
 
   const { updateLead } = await import('./supabase-api');

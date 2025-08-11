@@ -9,10 +9,6 @@ import {
   MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
 import { MarketHierarchy, DynamicMarket } from '@/types';
-import { detectMetroArea } from '@/utils/metro-areas';
-import { normalizeState } from '@/utils/state-utils';
-import { getStateFromPhone } from '@/utils/area-codes';
-import { getCityFromPhone } from '@/utils/area-code-cities';
 import UnassignedLeadsModal from '@/components/modals/UnassignedLeadsModal';
 
 interface ViewsSidebarProps {
@@ -36,6 +32,35 @@ export default function ViewsSidebar({ isOpen, onClose }: ViewsSidebarProps) {
   const [showUnassignedModal, setShowUnassignedModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'markets' | 'queries'>('markets');
   
+  // Load expanded states and active tab from localStorage on mount
+  useEffect(() => {
+    // Load expanded states
+    const savedExpanded = localStorage.getItem('viewsSidebarExpanded');
+    if (savedExpanded) {
+      try {
+        const savedArray = JSON.parse(savedExpanded);
+        setExpandedStates(new Set(savedArray));
+      } catch (e) {
+        console.error('Failed to parse saved expanded states:', e);
+      }
+    }
+    
+    // Load active tab
+    const savedTab = localStorage.getItem('viewsSidebarActiveTab');
+    if (savedTab === 'markets' || savedTab === 'queries') {
+      setActiveTab(savedTab);
+    }
+  }, []);
+  
+  // Save expanded states to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('viewsSidebarExpanded', JSON.stringify(Array.from(expandedStates)));
+  }, [expandedStates]);
+  
+  // Save active tab to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('viewsSidebarActiveTab', activeTab);
+  }, [activeTab]);
   
   // Load dynamic markets
   useEffect(() => {
@@ -45,45 +70,103 @@ export default function ViewsSidebar({ isOpen, onClose }: ViewsSidebarProps) {
   
 
   
-  // Group leads by search query AND market
+  // Group leads by search query, organized by state then city
   const searchQueriesByMarket = useMemo(() => {
-    const marketQueries = new Map<string, Map<string, number>>();
+    // Structure: State -> City -> Search Query -> Count
+    const stateData = new Map<string, Map<string, Map<string, number>>>();
+    
+    // Debug: count leads with missing fields
+    let missingSearchQuery = 0;
+    let missingCity = 0;
+    let missingState = 0;
+    let validLeads = 0;
     
     leads.forEach(lead => {
-      if (lead.search_query && lead.city && lead.state) {
-        const marketKey = `${lead.city}, ${lead.state}`;
+      if (!lead.search_query) missingSearchQuery++;
+      if (!lead.city) missingCity++;
+      if (!lead.state) missingState++;
+      
+      if (lead.search_query) {
+        validLeads++;
         
-        if (!marketQueries.has(marketKey)) {
-          marketQueries.set(marketKey, new Map());
+        // Determine location keys
+        const stateKey = lead.state || 'Unknown State';
+        const cityKey = lead.city || 'Unknown City';
+        
+        // Initialize state map if needed
+        if (!stateData.has(stateKey)) {
+          stateData.set(stateKey, new Map());
         }
         
-        const queries = marketQueries.get(marketKey)!;
-        queries.set(lead.search_query, (queries.get(lead.search_query) || 0) + 1);
+        const cityMap = stateData.get(stateKey)!;
+        
+        // Initialize city map if needed
+        if (!cityMap.has(cityKey)) {
+          cityMap.set(cityKey, new Map());
+        }
+        
+        const queryMap = cityMap.get(cityKey)!;
+        queryMap.set(lead.search_query, (queryMap.get(lead.search_query) || 0) + 1);
       }
     });
     
-    // Convert to sorted structure
+    // Log debug info once
+    if (leads.length > 0) {
+      console.log('ViewsSidebar lead analysis:', {
+        totalLeads: leads.length,
+        validLeads,
+        missingSearchQuery,
+        missingCity,
+        missingState
+      });
+    }
+    
+    // Convert to sorted structure with state and city grouping
     const result: Array<{
-      market: string;
-      queries: Array<{ query: string; count: number }>;
+      state: string;
+      cities: Array<{
+        city: string;
+        queries: Array<{ query: string; count: number }>;
+        totalCount: number;
+      }>;
       totalCount: number;
     }> = [];
     
-    marketQueries.forEach((queries, market) => {
-      const sortedQueries = Array.from(queries.entries())
-        .sort((a, b) => b[1] - a[1])
-        .map(([query, count]) => ({ query, count }));
+    stateData.forEach((cityMap, state) => {
+      const cities: Array<{
+        city: string;
+        queries: Array<{ query: string; count: number }>;
+        totalCount: number;
+      }> = [];
       
-      const totalCount = sortedQueries.reduce((sum, q) => sum + q.count, 0);
+      let stateTotalCount = 0;
+      
+      cityMap.forEach((queryMap, city) => {
+        const sortedQueries = Array.from(queryMap.entries())
+          .sort((a, b) => b[1] - a[1])
+          .map(([query, count]) => ({ query, count }));
+        
+        const cityTotalCount = sortedQueries.reduce((sum, q) => sum + q.count, 0);
+        stateTotalCount += cityTotalCount;
+        
+        cities.push({
+          city,
+          queries: sortedQueries,
+          totalCount: cityTotalCount
+        });
+      });
+      
+      // Sort cities by total count
+      cities.sort((a, b) => b.totalCount - a.totalCount);
       
       result.push({
-        market,
-        queries: sortedQueries,
-        totalCount
+        state,
+        cities,
+        totalCount: stateTotalCount
       });
     });
     
-    // Sort markets by total lead count
+    // Sort states by total lead count
     return result.sort((a, b) => b.totalCount - a.totalCount);
   }, [leads]);
   
@@ -197,60 +280,26 @@ export default function ViewsSidebar({ isOpen, onClose }: ViewsSidebarProps) {
   
 
   
-  // Calculate truly unassigned leads - those that can't be placed in any market
+  // Calculate truly unassigned leads - only those with no city/state in database
   const unassignedCount = leads.filter(lead => {
-    // Check if we can detect state or city from any method
-    let detectedState = normalizeState(lead.state);
-    let detectedCity = lead.city || '';
+    // Simply check if lead has no city AND no state
+    const hasCity = lead.city && lead.city.trim() !== '';
+    const hasState = lead.state && lead.state.trim() !== '';
     
-    
-    // Extract city from company name if not already set
-    if (!detectedCity && lead.company_name) {
-      // Common patterns: "Company - City" or "Company in City"
-      const dashMatch = lead.company_name.match(/\s*-\s*([A-Za-z\s]+?)$/);
-      const inMatch = lead.company_name.match(/\sin\s+([A-Za-z\s]+?)$/i);
-      const potentialCity = dashMatch?.[1] || inMatch?.[1];
-      
-      if (potentialCity) {
-        const trimmedCity = potentialCity.trim();
-        // Check if this is a known city
-        const detectedMetro = detectMetroArea(trimmedCity, '');
-        if (detectedMetro) {
-          detectedCity = trimmedCity;
-          if (!detectedState) {
-            detectedState = detectedMetro.state;
-          }
-        }
-      }
-    }
-    
-    if (!detectedState && detectedCity) {
-      const detectedMetro = detectMetroArea(detectedCity, '');
-      if (detectedMetro) detectedState = detectedMetro.state;
-    }
-    
-    if (lead.phone) {
-      if (!detectedState) {
-        detectedState = getStateFromPhone(lead.phone) || '';
-      }
-      if (!detectedCity) {
-        detectedCity = getCityFromPhone(lead.phone) || '';
-      }
-    }
-    
-    // Only count as unassigned if we can't detect any location by any method
-    return !detectedCity && !detectedState;
+    // Only count as unassigned if BOTH city and state are missing
+    return !hasCity && !hasState;
   }).length;
   
   return (
     <>
       {/* Sliding Panel - Fixed position next to main sidebar */}
       <div 
-        className={`fixed top-0 h-screen bg-white dark:bg-gray-900 flex flex-col border-r border-gray-200 dark:border-gray-700 z-30 ${
+        className={`fixed top-0 h-screen bg-white dark:bg-gray-900 flex flex-col border-r border-gray-200 dark:border-gray-700 z-30 transition-all duration-300 ease-in-out ${
           isOpen ? 'w-80 shadow-xl' : 'w-0'
         } overflow-hidden`}
         style={{
-          left: `${isSidebarCollapsed ? 64 : 224}px`
+          left: `${isSidebarCollapsed ? 64 : 224}px`,
+          transition: 'left 300ms ease-in-out, width 300ms ease-in-out'
         }}
       >
       {/* Header */}
@@ -359,39 +408,59 @@ export default function ViewsSidebar({ isOpen, onClose }: ViewsSidebarProps) {
                     {searchQueries.length} unique search queries across {searchQueriesByMarket.length} markets
                   </div>
                 </div>
-                {searchQueriesByMarket.map(({ market, queries, totalCount }) => (
-                  <div key={market} className="mb-3">
-                    <div className="px-4 py-1.5 bg-gray-100 dark:bg-gray-800 border-y border-gray-200 dark:border-gray-700">
+                {searchQueriesByMarket.map(({ state, cities, totalCount }) => (
+                  <div key={state} className="mb-4">
+                    {/* State header */}
+                    <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 border-y border-gray-200 dark:border-gray-700">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                          {market}
+                        <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          {state === 'Unknown State' ? '📍 Unknown Location' : `${state} State`}
                         </span>
                         <span className="text-xs text-gray-500 dark:text-gray-400">
                           {totalCount} leads
                         </span>
                       </div>
                     </div>
-                    {queries.map(({ query, count }) => (
-                      <button
-                        key={`${market}-${query}`}
-                        onClick={() => setCurrentMarket({
-                          id: `query-${query}`,
-                          name: query,
-                          type: 'query' as any,
-                          cities: [],
-                          leadCount: count
-                        })}
-                        className={`
-                          w-full flex items-center justify-between px-4 py-2 text-sm
-                          hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors
-                          ${currentMarket?.id === `query-${query}` ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-700 dark:text-gray-300'}
-                        `}
-                      >
-                        <span className="truncate pr-2 text-left pl-4">{query}</span>
-                        <span className={`text-xs flex-shrink-0 ${currentMarket?.id === `query-${query}` ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                          {count}
-                        </span>
-                      </button>
+                    
+                    {/* Cities within state */}
+                    {cities.map(({ city, queries, totalCount: cityTotal }) => (
+                      <div key={`${state}-${city}`} className="mb-2">
+                        {/* City header */}
+                        <div className="px-6 py-1.5 bg-gray-50 dark:bg-gray-900/50">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                              📍 {city}
+                            </span>
+                            <span className="text-xs text-gray-500 dark:text-gray-500">
+                              {cityTotal}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Queries within city */}
+                        {queries.map(({ query, count }) => (
+                          <button
+                            key={`${state}-${city}-${query}`}
+                            onClick={() => setCurrentMarket({
+                              id: `query-${query}`,
+                              name: query,
+                              type: 'query' as any,
+                              cities: [],
+                              leadCount: count
+                            })}
+                            className={`
+                              w-full flex items-center justify-between px-4 py-2 text-sm
+                              hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors
+                              ${currentMarket?.id === `query-${query}` ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-700 dark:text-gray-300'}
+                            `}
+                          >
+                            <span className="truncate pr-2 text-left pl-8">{query}</span>
+                            <span className={`text-xs flex-shrink-0 ${currentMarket?.id === `query-${query}` ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                              {count}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     ))}
                   </div>
                 ))}

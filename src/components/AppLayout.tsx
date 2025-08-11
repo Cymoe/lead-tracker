@@ -22,8 +22,7 @@ function AppLayoutContent({ children }: AppLayoutProps) {
   
   const handleViewsPanelToggle = (open: boolean) => {
     setIsViewsPanelOpen(open);
-    // Emit event for pages to listen to
-    window.dispatchEvent(new CustomEvent('viewsPanelToggled', { detail: { isOpen: open } }));
+    // Event is now emitted by setIsViewsPanelOpen in LayoutContext
   };
   
   // Remove initial mount flag after component mounts
@@ -32,23 +31,29 @@ function AppLayoutContent({ children }: AppLayoutProps) {
     const timer = setTimeout(() => {
       setIsInitialMount(false);
     }, 100);
+    
     return () => clearTimeout(timer);
   }, []);
 
   return (
     <>
-      {/* Views Panel Tab - Positioned next to sidebar */}
-      {isClient && !isViewsPanelOpen && (
+      {/* Markets Panel Tab - Always visible, moves with panel */}
+      {isClient && (
         <button
-          onClick={() => handleViewsPanelToggle(true)}
-          className={`hidden lg:block fixed top-16 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 py-4 px-2 rounded-r-md shadow-md ${!isInitialMount ? 'transition-all duration-300' : ''} border border-gray-300 dark:border-gray-600 z-40 text-xs font-medium`}
+          onClick={() => handleViewsPanelToggle(!isViewsPanelOpen)}
+          className={`hidden lg:block fixed bottom-24 ${
+            isViewsPanelOpen 
+              ? 'bg-blue-600 dark:bg-blue-700 hover:bg-blue-700 dark:hover:bg-blue-800 text-white' 
+              : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+          } py-4 px-2 rounded-r-md shadow-md ${!isInitialMount ? 'transition-all duration-300 ease-in-out' : ''} border border-gray-300 dark:border-gray-600 z-40 text-xs font-medium`}
           style={{
-            left: `${isSidebarCollapsed ? 64 : 224}px`,
-            ...(isInitialMount ? {} : { transition: 'left 300ms' })
+            left: `${(isSidebarCollapsed ? 64 : 224) + (isViewsPanelOpen ? 320 : 0)}px`,
+            ...(isInitialMount ? {} : { transition: 'left 300ms ease-in-out' })
           }}
+          title={isViewsPanelOpen ? "Close Markets" : "Open Markets"}
         >
           <span style={{ writingMode: 'vertical-lr', textOrientation: 'mixed' }}>
-            Views
+            Markets
           </span>
         </button>
       )}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { generateNotesFromLead, calculateLeadScore, getQualitySignals } from '@/utils/lead-notes-generator';
 
 interface ApifySearchParams {
   serviceType: string;
@@ -193,47 +194,65 @@ export async function POST(request: NextRequest) {
     const results = await resultsResponse.json();
     
     // Transform Apify results to match our format
-    const enrichedResults = results.map((place: ApifyPlace) => ({
-      place_id: place.placeId,
-      name: place.title,
-      formatted_address: place.address,
-      formatted_phone_number: place.phone,
-      website: place.website,
-      rating: place.totalScore,
-      user_ratings_total: place.reviewsCount,
-      types: place.categoryName ? [place.categoryName] : [],
-      geometry: place.location ? {
-        location: {
-          lat: place.location.lat,
-          lng: place.location.lng
-        }
-      } : undefined,
-      url: place.url,
-      permanently_closed: place.permanentlyClosed,
-      temporarily_closed: place.temporarilyClosed,
-      // Apify-specific enriched data
-      emails: place.emails || [],
-      social_media: {
-        instagram: place.instagrams || [],
-        facebook: place.facebooks || [],
-        linkedin: place.linkedIns || [],
-        twitter: place.twitters || []
-      },
-      reviews: includeReviews ? (place.reviews || []) : [],
-      images: includeImages ? (place.images || []) : [],
-      // Scoring
-      opportunity_score: calculateOpportunityScore(place),
-      quality_signals: getQualitySignals(place),
-      import_ready: {
+    const enrichedResults = results.map((place: ApifyPlace) => {
+      // Create a lead object for note generation
+      const leadData = {
         company_name: place.title,
         address: place.address,
-        phone: place.phone || '',
-        website: place.website || '',
-        service_type: serviceType,
-        source: 'Apify Google Maps',
-        notes: generateNotes(place, includeContacts)
-      }
-    }));
+        phone: place.phone,
+        website: place.website,
+        rating: place.totalScore,
+        review_count: place.reviewsCount,
+        email: place.emails?.[0],
+        instagram_url: place.instagrams?.[0],
+        facebook_url: place.facebooks?.[0],
+        linkedin_url: place.linkedIns?.[0],
+        twitter_url: place.twitters?.[0],
+        lead_source: 'Apify Google Maps'
+      };
+      
+      return {
+        place_id: place.placeId,
+        name: place.title,
+        formatted_address: place.address,
+        formatted_phone_number: place.phone,
+        website: place.website,
+        rating: place.totalScore,
+        user_ratings_total: place.reviewsCount,
+        types: place.categoryName ? [place.categoryName] : [],
+        geometry: place.location ? {
+          location: {
+            lat: place.location.lat,
+            lng: place.location.lng
+          }
+        } : undefined,
+        url: place.url,
+        permanently_closed: place.permanentlyClosed,
+        temporarily_closed: place.temporarilyClosed,
+        // Apify-specific enriched data
+        emails: place.emails || [],
+        social_media: {
+          instagram: place.instagrams || [],
+          facebook: place.facebooks || [],
+          linkedin: place.linkedIns || [],
+          twitter: place.twitters || []
+        },
+        reviews: includeReviews ? (place.reviews || []) : [],
+        images: includeImages ? (place.images || []) : [],
+        // Scoring
+        opportunity_score: calculateLeadScore(leadData),
+        quality_signals: getQualitySignals(leadData),
+        import_ready: {
+          company_name: place.title,
+          address: place.address,
+          phone: place.phone || '',
+          website: place.website || '',
+          service_type: serviceType,
+          source: 'Apify Google Maps',
+          notes: generateNotesFromLead(leadData)
+        }
+      };
+    });
     
     // Sort by opportunity score
     enrichedResults.sort((a: any, b: any) => b.opportunity_score - a.opportunity_score);
@@ -249,7 +268,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       results: enrichedResults,
       total: enrichedResults.length,
-      search_params: { serviceType, city, radius, maxResults },
+      search_params: { 
+        serviceType, 
+        city, 
+        radius, 
+        maxResults,
+        searchQuery: `${serviceType} in ${city}`,  // Store the actual search query used
+        locationQuery: city
+      },
       cost_estimate: costEstimate,
       apify_run_id: runId
     });
@@ -268,77 +294,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function calculateOpportunityScore(place: ApifyPlace): number {
-  let score = 50; // Base score
-  
-  // No website = high opportunity
-  if (!place.website) {
-    score += 30;
-  }
-  
-  // Low review count = less established, more opportunity
-  if (place.reviewsCount && place.reviewsCount < 50) {
-    score += 20;
-  } else if (place.reviewsCount && place.reviewsCount < 100) {
-    score += 10;
-  }
-  
-  // Medium rating = room for improvement
-  if (place.totalScore && place.totalScore >= 3.5 && place.totalScore <= 4.2) {
-    score += 15;
-  }
-  
-  // Has contact info = easier to reach
-  if (place.emails && place.emails.length > 0) {
-    score += 10;
-  }
-  
-  return Math.min(score, 100);
-}
-
-function getQualitySignals(place: ApifyPlace): string[] {
-  const signals = [];
-  
-  if (!place.website) {
-    signals.push('🚨 No Website');
-  }
-  
-  if (place.reviewsCount && place.reviewsCount < 50) {
-    signals.push('🌱 Growing Business');
-  }
-  
-  if (place.totalScore && place.totalScore < 4.0) {
-    signals.push('⚡ Reputation Opportunity');
-  }
-  
-  if (place.emails && place.emails.length > 0) {
-    signals.push('📧 Email Available');
-  }
-  
-  if (place.facebooks && place.facebooks.length > 0) {
-    signals.push('📱 Social Media Present');
-  }
-  
-  return signals;
-}
-
-function generateNotes(place: ApifyPlace, includeContacts: boolean): string {
-  const notes = [];
-  
-  if (!place.website) {
-    notes.push('No website found - high priority lead');
-  }
-  
-  if (place.totalScore) {
-    notes.push(`${place.totalScore}⭐ rating with ${place.reviewsCount || 0} reviews`);
-  }
-  
-  if (includeContacts && place.emails && place.emails.length > 0) {
-    notes.push(`Contact email available: ${place.emails[0]}`);
-  }
-  
-  return notes.join('. ');
-}
+// Note: calculateOpportunityScore, getQualitySignals, and generateNotes have been replaced
+// by imports from lead-notes-generator.ts
 
 function calculateCostEstimate(
   placeCount: number, 

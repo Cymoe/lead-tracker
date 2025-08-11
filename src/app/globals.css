@@ -17,28 +17,27 @@
 
 @keyframes highlightBorder {
   0%, 100% {
-    border-color: rgb(34 197 94);
+    border-color: rgb(59 130 246);
   }
   50% {
-    border-color: rgb(74 222 128);
+    border-color: rgb(96 165 250);
   }
 }
 
 .newly-imported {
   animation: subtlePulse 2s ease-in-out infinite;
-  border-left: 4px solid rgb(34 197 94);
-  animation: highlightBorder 2s ease-in-out infinite;
+  border-left: 4px solid rgb(59 130 246);
 }
 
 @keyframes flashHighlight {
   0% {
-    background-color: rgb(74 222 128 / 0.3);
+    background-color: rgb(59 130 246 / 0.1);
   }
   50% {
-    background-color: rgb(34 197 94 / 0.5);
+    background-color: rgb(59 130 246 / 0.2);
   }
   100% {
-    background-color: rgb(74 222 128 / 0.3);
+    background-color: rgb(59 130 246 / 0.1);
   }
 }
 
